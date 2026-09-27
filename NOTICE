@@ -1,0 +1,11 @@
+OpenSSL Kotlin
+Copyright 2026 Neton contributors
+
+This product bundles OpenSSL 4.0.2, developed by The OpenSSL Project Authors.
+Upstream: https://github.com/openssl/openssl
+Upstream license: licenses/OpenSSL.txt
+
+Build-system reference: https://github.com/ensody/native-builds
+No ensody/native-builds source files are incorporated in this repository.
+
+The Gradle Wrapper files are generated Gradle tooling, licensed under Apache-2.0.

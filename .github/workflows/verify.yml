@@ -1,0 +1,52 @@
+name: Verify bindings
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-build-guards.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Test native host
+        run: |
+          if [ "$(uname -m)" = arm64 ]; then TARGET=macosArm64; else TARGET=macosX64; fi
+          ./gradlew -PnativeTargets=$TARGET :openssl:${TARGET}Test --console=plain
+      - name: Validate external Maven consumer
+        run: |
+          ./gradlew :openssl:publishToMavenLocal --console=plain
+          if [ "$(uname -m)" = arm64 ]; then TARGET=MacosArm64; else TARGET=MacosX64; fi
+          ./gradlew -p smoke runReleaseExecutable$TARGET --console=plain
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-test-reports
+          path: openssl/build/test-results/
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-build-guards.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Bootstrap matching Kotlin compiler and sysroot
+        run: |
+          ./gradlew :openssl:downloadKotlinNativeDistribution
+          "$HOME/.konan/kotlin-native-prebuilt-linux-x86_64-2.4.0/bin/konanc" scripts/bootstrap.kt -target linux_x64 -produce library -o build/bootstrap
+      - name: Test Linux x64
+        run: ./gradlew -PnativeTargets=linuxX64 :openssl:linuxX64Test --console=plain
+      - name: Validate external Maven consumer
+        run: |
+          ./gradlew -PnativeTargets=linuxX64 :openssl:publishToMavenLocal --console=plain
+          ./gradlew -p smoke runReleaseExecutableLinuxX64 --console=plain
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-test-reports
+          path: openssl/build/test-results/
