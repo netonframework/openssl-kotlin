@@ -16,6 +16,8 @@
 #include <openssl/rand.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
+#include "neton_crypto.h"
+#include "neton_tls.h"
 
 /* C unsigned long differs on Windows; keep it out of shared Kotlin metadata. */
 static inline int neton_openssl_next_error(char *buffer, size_t capacity) {

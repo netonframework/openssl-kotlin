@@ -1,7 +1,7 @@
 # OpenSSL Kotlin
 
 OpenSSL **4.0.2** static libraries and Kotlin/Native bindings for the Neton protocol stack.
-Maven coordinates: `com.netonstream:openssl:4.0.2-1` (publication candidate, not yet on Central).
+Maven coordinates: `com.netonstream:openssl:4.0.2-2` (publication candidate, not yet on Central).
 Kotlin compiler: **2.4.0**. Minimum supported OpenSSL line: **4.0.x**, no 3.x compatibility.
 
 ## Scope
@@ -9,6 +9,8 @@ Kotlin compiler: **2.4.0**. Minimum supported OpenSSL line: **4.0.x**, no 3.x co
 - Bundled `libssl.a` + `libcrypto.a`, built from a SHA-256-pinned upstream release archive.
 - Raw C API in `neton.openssl.c`: SSL, BIO, X509, EVP, RAND, errors and third-party QUIC TLS entry points.
 - `neton.openssl.OpenSsl`: runtime/header version check, CSPRNG, SHA-256.
+- Reusable `AeadKey`, `HeaderProtectionKey`, caller-buffer digest/HMAC/HKDF/random operations.
+- `TlsContext` / `TlsEngine`: bounded, socket-free TLS 1.2/1.3 with explicit trust and identity.
 - No dependency on neton-io, no socket ownership, no replacement cryptography or TLS implementation.
 - No TLS `IoStream` adapter or QUIC handshake adapter yet. Those are separate protocol integration work.
 
@@ -61,7 +63,7 @@ certificate store behavior, network interoperability, QUIC correctness or perfor
 ## Use
 
 ```kotlin
-implementation("com.netonstream:openssl:4.0.2-1") // after local/remote publication
+implementation("com.netonstream:openssl:4.0.2-2") // after local/remote publication
 ```
 
 ```kotlin
@@ -76,6 +78,53 @@ The klib embeds static libraries. Users do not need an installed system OpenSSL 
 native build toolchain. Keep Kotlin/Native compiler versions aligned between producer and consumer.
 Android embeds a combined archive so Kotlin's linker cannot put libcrypto before libssl;
 ARM64 uses inline atomics for compatibility with Kotlin's older Android compiler runtime.
+
+## Safe facade and boundaries
+
+All handles need explicit `close()` in `finally`. Double-close is harmless; use after
+close fails. Mutable engines/keys reject concurrent use and reentrancy. A frozen `TlsContext`
+allows concurrent `newEngine`; close the factory only after its callers have stopped (close
+rejects while a creation is active). Sequential transfer between threads is permitted.
+Do not share a key/engine concurrently between coroutines. No coroutine library or scheduler is
+used internally. No Kotlin callback crosses the C ABI in the current facade.
+Session caching, server ticket issuance, 0-RTT, renegotiation and TLS compression are disabled
+in this increment. Certificate chain/validity and SAN identity verification are enabled for
+clients; automatic online OCSP/CRL fetching and browser-specific trust policy are not provided.
+
+| Capability | Current delivery |
+|---|---|
+| AES-128/256-GCM, ChaCha20-Poly1305 | Reusable key, in-place caller buffers, 12-byte nonce/16-byte tag; failed plaintext wiped |
+| Header protection | AES-128/256 and ChaCha20 masks; protocol applies the mask and chooses offsets |
+| HKDF / digest / HMAC / random | SHA256/384 HKDF including TLS labels, SHA1/256/384/512 digest, HMAC SHA256/384, randomFill, constant-time comparison |
+| TLS engine | Bounded BIO pair, fragmentation, NeedRead/NeedWrite, retry-owned 16KiB plaintext, close_notify vs bare EOF |
+| TLS configuration | TLS1.2/1.3, cipher lists/groups, PEM identity/roots, SAN DNS/IP verification, optional/required mTLS, static ALPN selection |
+| TLS metadata | ALPN/version/cipher/SNI, copied peer DER chain, exporter |
+| Deferred, NOT advertised safe-ready | QUIC TLS callback facade/interoperability; tickets/resumption/0-RTT; dynamic SNI certificate selection; DER/encrypted identity input; platform trust providers; published certificate testkit |
+
+The caller must guarantee AEAD nonce uniqueness and enforce protocol-specific key usage limits.
+`seal` reserves 16 extra bytes for the tag. `open` returns false for an invalid tag and wipes the
+tentative plaintext. Output arrays cannot alias nonce/AAD. HKDF and HMAC are key-setup/one-shot
+APIs; they do not promise reusable native contexts or zero allocation. SHA1 is compatibility-only.
+See [the full contract and remaining gates](docs/SAFE_API.md) and [benchmark method](benchmark/README.md).
+
+### Driving TLS without sockets
+
+Create a client `TlsContext(server = false, trustRootsPem = ...)` and call
+`newEngine(PeerIdentity.Dns("example.com"))`. A server requires a PEM chain and matching key.
+The factory can be closed after engine creation; OpenSSL retains the engine's context.
+
+1. Call `handshake`; drain ciphertext into the transport and feed peer ciphertext back.
+2. Preserve any unconsumed input when `feedCiphertext` returns less than supplied, including zero.
+3. Drain output regardless of NeedRead/NeedWrite; neither means "no pending output". Do not busy-spin.
+4. After handshake, continue reads for TLS1.3 post-handshake messages, not just application data.
+5. `read`/`write` return byte counts or `TlsEngine.NEED_READ`, `NEED_WRITE`, `PEER_CLOSED`.
+   Retry a pending write with exactly the same bytes/length; only feed/drain or close until retry.
+6. Use `closeNotify` for TLS half-close and drain its ciphertext. Report raw transport EOF via
+   `transportEof`; lack of peer close_notify is an error, not clean EOF. `close()` only frees resources.
+
+The library does not own timeouts, retry policy, socket closing or cancellation. A canceled adapter
+must stop concurrent use and close the engine. BIO limits bound transport staging, not every
+allocation inside OpenSSL; certificate message/depth limits are configured separately.
 
 ## Versions and release
 

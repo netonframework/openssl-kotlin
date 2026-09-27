@@ -54,7 +54,7 @@ kotlin {
                 inputs.dir(prefix.map { it.dir("include") })
                 inputs.files(prefix.map { it.file("lib/libssl.a") }, prefix.map { it.file("lib/libcrypto.a") })
                 if (targetName.startsWith("androidNative")) inputs.file(prefix.map { it.file("lib/libopenssl.a") })
-                inputs.file(project.file("src/nativeInterop/cinterop/neton_openssl.h"))
+                inputs.files(project.fileTree("src/nativeInterop/cinterop") { include("*.h") })
             }
         }
     }

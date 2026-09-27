@@ -21,10 +21,16 @@ object OpenSsl {
         require(size >= 0)
         if (size == 0) return ByteArray(0)
         val output = ByteArray(size)
-        ERR_clear_error()
-        val result = output.usePinned { RAND_bytes(it.addressOf(0).reinterpret(), size) }
-        if (result != 1) { output.fill(0); throw failure("RAND_bytes") }
+        randomFill(output)
         return output
+    }
+
+    fun randomFill(output: ByteArray, offset: Int = 0, length: Int = output.size - offset) {
+        checkRange(output, offset, length)
+        if (length == 0) return
+        ERR_clear_error()
+        val result = output.withBytes(offset, length) { RAND_bytes(it, length) }
+        if (result != 1) { output.fill(0, offset, offset + length); throw sslFailure("RAND_bytes") }
     }
 
     fun sha256(input: ByteArray): ByteArray = memScoped {
@@ -35,19 +41,10 @@ object OpenSsl {
             if (input.isEmpty()) EVP_Digest(null, 0u, out.addressOf(0).reinterpret(), length.ptr, EVP_sha256(), null)
             else input.usePinned { src -> EVP_Digest(src.addressOf(0), input.size.convert(), out.addressOf(0).reinterpret(), length.ptr, EVP_sha256(), null) }
         }
-        if (result != 1 || length.value != 32u) throw failure("EVP_Digest")
+        if (result != 1 || length.value != 32u) throw sslFailure("EVP_Digest")
         output
     }
 
-    // OpenSSL's error queue is thread-local: drain it before leaving the synchronous call path.
-    private fun failure(operation: String): OpenSslException = memScoped {
-        val buffer = allocArray<ByteVar>(256)
-        val messages = mutableListOf<String>()
-        while (neton_openssl_next_error(buffer, 256u) != 0) {
-            messages += buffer.toKString()
-        }
-        OpenSslException("$operation failed: ${messages.joinToString("; ").ifEmpty { "no error detail" }}")
-    }
 }
 
-class OpenSslException(message: String) : Exception(message)
+open class OpenSslException(message: String) : Exception(message)

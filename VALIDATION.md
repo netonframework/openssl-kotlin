@@ -2,6 +2,27 @@
 
 Publication status: **not published to Maven Central**.
 
+## Safe facade increment (4.0.2-2)
+
+macOS ARM64 and macOS x64 under Rosetta: 25/25 tests passed on each architecture.
+The expanded tests cover reusable AEAD, tag/AAD rejection and plaintext wiping, ranges,
+RFC 9001 header protection and TLS label vectors, RFC 5869 HKDF, empty HMAC/HKDF keys,
+handle reentrancy, concurrent engine creation from a frozen context, bounded TLS1.2/1.3
+engine pumping, write backpressure, exact retry bytes,
+PEM trust/identity, key mismatch, ALPN mismatch, DNS/IP identity, expiry, mTLS, exporter,
+peer chain/SNI, factory closed before engine, close_notify versus transport EOF.
+
+All ten targets cross-linked with the final facade and common metadata publication passed.
+Existing 4.0.2 archives
+are reused: this increment changes only C shims/Kotlin, not upstream OpenSSL or its build flags.
+The independent Maven consumer resolves 4.0.2-2 and runs an AEAD roundtrip as well as SHA/RAND.
+Local benchmark source, observations and limitations are in benchmark/results/README.md.
+
+No Linux runtime was executed locally: Colima was not running. Linux Actions remains a
+runtime gate, not a result inferred from successful cross-linking. QUIC safe callback handling,
+interop, session resumption/0-RTT, platform trust stores and allocation tracing are still open.
+README's capability matrix distinguishes implemented from deferred items.
+
 ## Local verification
 
 OpenSSL 4.0.2, wrapper 4.0.2-1, Kotlin/Native 2.4.0, Gradle 8.14.2.

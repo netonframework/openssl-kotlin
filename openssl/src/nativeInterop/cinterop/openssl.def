@@ -1,5 +1,5 @@
 package = neton.openssl.c
 headers = neton_openssl.h
-headerFilter = neton_openssl.h openssl/**
+headerFilter = neton_*.h openssl/**
 linkerOpts.linux = -ldl -lpthread
 linkerOpts.mingw = -lws2_32 -lcrypt32 -lbcrypt
