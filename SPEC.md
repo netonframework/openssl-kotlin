@@ -26,7 +26,7 @@ Not a production TLS adapter. See VALIDATION.md for executed tests versus cross-
 10. Performance must be measured against direct C calls using the same build/algorithm/buffers.
     This binding makes no claim that OpenSSL 4.x or Kotlin interop improves throughput by itself.
 
-## Facade increment 4.0.2-2
+## Facade increment (included in first release 4.0.2)
 
 docs/SAFE_API.md defines the target contract and additional missing gates; README's capability
 table is authoritative for implemented versus deferred functionality. No entire-roadmap completion

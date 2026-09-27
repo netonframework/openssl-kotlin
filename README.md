@@ -1,7 +1,7 @@
 # OpenSSL Kotlin
 
 OpenSSL **4.0.2** static libraries and Kotlin/Native bindings for the Neton protocol stack.
-Maven coordinates: `com.netonstream:openssl:4.0.2-2` (publication candidate, not yet on Central).
+Maven coordinates: `com.netonstream:openssl:4.0.2` (publication candidate, not yet on Central).
 Kotlin compiler: **2.4.0**. Minimum supported OpenSSL line: **4.0.x**, no 3.x compatibility.
 
 ## Scope
@@ -63,7 +63,7 @@ certificate store behavior, network interoperability, QUIC correctness or perfor
 ## Use
 
 ```kotlin
-implementation("com.netonstream:openssl:4.0.2-2") // after local/remote publication
+implementation("com.netonstream:openssl:4.0.2") // after local/remote publication
 ```
 
 ```kotlin
@@ -128,8 +128,9 @@ allocation inside OpenSSL; certificate message/depth limits are configured separ
 
 ## Versions and release
 
-`4.0.2-1` means upstream OpenSSL `4.0.2`, wrapper revision `1`. A wrapper-only rebuild increments
-the suffix. An upstream update changes `opensslVersion`, `opensslSha256` and the publication version
+The first public release uses `4.0.2`, matching upstream OpenSSL. Later wrapper-only fixes use
+`4.0.2-1`, `4.0.2-2`, and so on. Local development labels are not publication revisions.
+An upstream update changes `opensslVersion`, `opensslSha256` and the publication version
 in `gradle.properties`, refreshes the upstream license, and must pass the same matrix before release.
 4.1.x is an upgrade path, **not currently tested or claimed compatible**. Do not auto-follow branches.
 
@@ -137,7 +138,14 @@ in `gradle.properties`, refreshes the upstream license, and must pass the same m
 advertised target publications, one root metadata publication configured with `nativeTargets=all`,
 signed artifacts, and a clean external consumer test. Never publish host-only root metadata as a
 complete multiplatform release. `publishAllPublicationsToStagingRepository` stages files locally;
-this repository does not auto-upload to Central. Signing uses `SIGNING_KEY` / `SIGNING_PASSWORD`.
+this task does not auto-upload to Central. Signing uses `SIGNING_KEY` / `SIGNING_PASSWORD`
+or Gradle user properties `signingInMemoryKey` / `signingInMemoryKeyPassword`.
+
+`python3 scripts/central.py bundle` checks that all eleven coordinates have signatures and
+packages only the configured release version. `upload` submits for validation without publishing;
+`status --id ID` inspects the deployment; `publish --id ID` explicitly releases a validated bundle.
+Portal credentials come from `MAVEN_CENTRAL_USERNAME` / `MAVEN_CENTRAL_PASSWORD` or Gradle user
+properties `mavenCentralUsername` / `mavenCentralPassword`. Never commit credentials or signatures' private keys.
 
 ## Provenance
 

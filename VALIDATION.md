@@ -1,8 +1,16 @@
 # Validation
 
-Publication status: **not published to Maven Central**.
+Publication status: **4.0.2 validated; publication requested, awaiting Central propagation**.
 
-## Safe facade increment (4.0.2-2)
+Deployment: `bc87dde3-2eb9-4dc5-878f-4c0ed3a7cb3e` (2026-09-28).
+All eleven coordinates and 70 signed artifacts passed Portal validation. The renamed
+4.0.2 Maven-local external consumer passed. Central-only resolution is pending propagation.
+The -1 and -2 local builds were never uploaded.
+
+## Safe facade increment (local development label 4.0.2-2)
+
+The -1 and -2 labels below were local development builds, never Central releases.
+The first public release is 4.0.2.
 
 macOS ARM64 and macOS x64 under Rosetta: 25/25 tests passed on each architecture.
 The expanded tests cover reusable AEAD, tag/AAD rejection and plaintext wiping, ranges,

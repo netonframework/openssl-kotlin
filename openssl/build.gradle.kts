@@ -64,9 +64,15 @@ kotlin {
     }
 }
 
+val apiDocsJar = tasks.register<Jar>("apiDocsJar") {
+    archiveClassifier.set("javadoc")
+    from(rootProject.file("README.md"))
+    from(rootProject.file("docs/SAFE_API.md"))
+}
 publishing {
     repositories { maven { name = "staging"; url = rootProject.layout.buildDirectory.dir("staging-repo").get().asFile.toURI() } }
     publications.withType<MavenPublication>().configureEach {
+        artifact(apiDocsJar)
         pom {
             name.set("Neton OpenSSL Kotlin")
             description.set("OpenSSL 4.x static libraries, C bindings and Kotlin/Native utilities")
@@ -77,13 +83,16 @@ publishing {
         }
     }
 }
-val key = providers.environmentVariable("SIGNING_KEY")
+val key = providers.environmentVariable("SIGNING_KEY").orElse(providers.gradleProperty("signingInMemoryKey"))
 tasks.withType<Jar>().configureEach {
     from(rootProject.file("LICENSE")) { into("META-INF") }
     from(rootProject.file("NOTICE")) { into("META-INF") }
     from(rootProject.file("licenses/OpenSSL.txt")) { into("META-INF/licenses") }
 }
 if (key.isPresent) signing {
-    useInMemoryPgpKeys(key.get(), providers.environmentVariable("SIGNING_PASSWORD").orNull)
+    useInMemoryPgpKeys(key.get(), providers.environmentVariable("SIGNING_PASSWORD").orElse(providers.gradleProperty("signingInMemoryKeyPassword")).orNull)
     sign(publishing.publications)
+}
+tasks.withType<org.gradle.api.publish.maven.tasks.AbstractPublishToMaven>().configureEach {
+    dependsOn(tasks.withType<org.gradle.plugins.signing.Sign>())
 }

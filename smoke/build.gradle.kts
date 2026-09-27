@@ -1,5 +1,8 @@
 plugins { kotlin("multiplatform") version "2.4.0" }
-repositories { mavenLocal(); mavenCentral() }
+repositories {
+    if (!providers.gradleProperty("centralOnly").isPresent) mavenLocal()
+    mavenCentral()
+}
 kotlin {
     val target = when (System.getProperty("os.name")) {
         "Mac OS X" -> if (System.getProperty("os.arch") == "aarch64") macosArm64() else macosX64()
@@ -7,5 +10,5 @@ kotlin {
         else -> error("Unsupported smoke-test host")
     }
     target.binaries.executable { entryPoint = "main" }
-    sourceSets.commonMain.dependencies { implementation("com.netonstream:openssl:4.0.2-2") }
+    sourceSets.commonMain.dependencies { implementation("com.netonstream:openssl:4.0.2") }
 }
