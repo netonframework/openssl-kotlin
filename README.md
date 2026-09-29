@@ -1,7 +1,7 @@
 # OpenSSL Kotlin
 
 OpenSSL **4.0.2** static libraries and Kotlin/Native bindings for the Neton protocol stack.
-Maven coordinates: `com.netonstream:openssl:4.0.2` (publication candidate, not yet on Central).
+Maven coordinates: `com.netonstream:openssl:0.1.0` (wrapper version; upstream OpenSSL 4.0.2).
 Kotlin compiler: **2.4.0**. Minimum supported OpenSSL line: **4.0.x**, no 3.x compatibility.
 
 ## Scope
@@ -63,7 +63,7 @@ certificate store behavior, network interoperability, QUIC correctness or perfor
 ## Use
 
 ```kotlin
-implementation("com.netonstream:openssl:4.0.2") // after local/remote publication
+implementation("com.netonstream:openssl:0.1.0")
 ```
 
 ```kotlin
@@ -128,9 +128,11 @@ allocation inside OpenSSL; certificate message/depth limits are configured separ
 
 ## Versions and release
 
-The first public release uses `4.0.2`, matching upstream OpenSSL. Later wrapper-only fixes use
-`4.0.2-1`, `4.0.2-2`, and so on. Local development labels are not publication revisions.
-An upstream update changes `opensslVersion`, `opensslSha256` and the publication version
+The unified Neton Stream library series starts at wrapper version `0.1.0`.
+It contains OpenSSL `4.0.2`; the previously published upstream-numbered `4.0.2` artifact
+is unchanged. Consumers must explicitly select the new series: `0.1.0` does not sort
+after `4.0.2`, so do not mix both versions transitively or use dynamic versions.
+An upstream update changes `opensslVersion`, `opensslSha256` and increments the wrapper version
 in `gradle.properties`, refreshes the upstream license, and must pass the same matrix before release.
 4.1.x is an upgrade path, **not currently tested or claimed compatible**. Do not auto-follow branches.
 
