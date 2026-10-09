@@ -1,4 +1,4 @@
-plugins { kotlin("multiplatform") version "2.4.0" }
+plugins { kotlin("multiplatform") version "2.4.20" }
 repositories { mavenLocal(); mavenCentral() }
 kotlin {
     val target = when (System.getProperty("os.name")) {

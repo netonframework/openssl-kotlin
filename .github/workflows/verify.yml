@@ -38,7 +38,7 @@ jobs:
       - name: Bootstrap matching Kotlin compiler and sysroot
         run: |
           ./gradlew :openssl:downloadKotlinNativeDistribution
-          "$HOME/.konan/kotlin-native-prebuilt-linux-x86_64-2.4.0/bin/konanc" scripts/bootstrap.kt -target linux_x64 -produce library -o build/bootstrap
+          "$HOME/.konan/kotlin-native-prebuilt-linux-x86_64-2.4.20/bin/konanc" scripts/bootstrap.kt -target linux_x64 -produce library -o build/bootstrap
       - name: Test Linux x64
         run: ./gradlew -PnativeTargets=linuxX64 :openssl:linuxX64Test --console=plain
       - name: Validate external Maven consumer

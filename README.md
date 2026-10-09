@@ -2,7 +2,7 @@
 
 OpenSSL **4.0.2** static libraries and Kotlin/Native bindings for the Neton protocol stack.
 Maven coordinates: `com.netonstream:openssl:4.0.2` (the version follows upstream OpenSSL).
-Kotlin compiler: **2.4.0**. Minimum supported OpenSSL line: **4.0.x**, no 3.x compatibility.
+Kotlin compiler: **2.4.20** (no lower version is accepted by the build). Minimum supported OpenSSL line: **4.0.x**, no 3.x compatibility.
 
 ## Scope
 
@@ -36,12 +36,12 @@ Use `-PnativeTargets=macosArm64,macosX64` or `-PnativeTargets=all` explicitly. E
 separate source, generated headers and output directories under `build/openssl/<target>`.
 Full OpenSSL build output is saved in that directory's `build.log`.
 
-Linux builds use the **Kotlin/Native 2.4.0 LLVM and sysroot**, including for cross compilation
+Linux builds use the **Kotlin/Native 2.4.20 LLVM and sysroot**, including for cross compilation
 from macOS. Bootstrap dependencies once (adjust KONAN_HOME for your host):
 
 ```sh
 ./gradlew :openssl:downloadKotlinNativeDistribution
-export KONAN_HOME="$HOME/.konan/kotlin-native-prebuilt-linux-x86_64-2.4.0"
+export KONAN_HOME="$HOME/.konan/kotlin-native-prebuilt-linux-x86_64-2.4.20"
 "$KONAN_HOME/bin/konanc" scripts/bootstrap.kt -target linux_x64 -produce library -o build/bootstrap
 ./gradlew -PnativeTargets=linuxX64 :openssl:linuxX64Test
 # Cross build: bootstrap linux_arm64 instead, then use :openssl:linkDebugTestLinuxArm64.

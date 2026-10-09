@@ -46,12 +46,12 @@ case "$TARGET" in
             CONFIG=linux-aarch64; TRIPLE=aarch64-unknown-linux-gnu
             TOOLCHAIN=aarch64-unknown-linux-gnu-gcc-8.3.0-glibc-2.25-kernel-4.9-2
         fi
-        # Match Kotlin 2.4.0's libc baseline, not the host distribution's libc.
+        # Match Kotlin 2.4.20's libc baseline, not the host distribution's libc (same LLVM 21 and sysroots as 2.4.0).
         case "$(uname -s):$(uname -m)" in
             Darwin:arm64) LLVM=llvm-21-aarch64-macos-essentials-97 ;;
             Darwin:x86_64) LLVM=llvm-21-x86_64-macos-essentials-83 ;;
             Linux:x86_64) LLVM=llvm-21-x86_64-linux-essentials-116 ;;
-            *) echo "Linux targets need the Kotlin 2.4.0 macOS or Linux x64 toolchain" >&2; exit 1 ;;
+            *) echo "Linux targets need the Kotlin 2.4.20 macOS or Linux x64 toolchain" >&2; exit 1 ;;
         esac
         BIN="$DATA/dependencies/$LLVM/bin"
         if [[ ! -x "$BIN/clang" ]]; then BIN="$DATA/dependencies/${LLVM/essentials/dev}/bin"; fi
