@@ -182,6 +182,29 @@ class QuicTls internal constructor(handle: Long) : AutoCloseable {
     override fun close() = handle.close()
 }
 
+/** Certificate and key checks with OpenSSL's parsers, for configurations built from DER or PEM. */
+object QuicTlsCredentials {
+    /** Whether [der] is exactly one X.509 certificate. */
+    fun isCertificate(der: ByteArray): Boolean = der.isNotEmpty() && QuicTlsPrimitives.isCertificate(der)
+
+    /** Whether [key] is an unencrypted private key, PEM or DER (PKCS#8, or a traditional RSA / EC key). */
+    fun isPrivateKey(key: ByteArray, pem: Boolean): Boolean = key.isNotEmpty() && QuicTlsPrimitives.isPrivateKey(key, pem)
+
+    /** The DER of every CERTIFICATE block of a PEM document, in order (OpenSSL's PEM reader). */
+    fun pemCertificates(pem: ByteArray): List<ByteArray> {
+        val bytes = QuicTlsPrimitives.pemCertificates(pem)
+        val out = ArrayList<ByteArray>()
+        var at = 0
+        while (at + 4 <= bytes.size) {
+            val n = ((bytes[at].toInt() and 0xff) shl 24) or ((bytes[at + 1].toInt() and 0xff) shl 16) or
+                ((bytes[at + 2].toInt() and 0xff) shl 8) or (bytes[at + 3].toInt() and 0xff)
+            out += bytes.copyOfRange(at + 4, at + 4 + n)
+            at += 4 + n
+        }
+        return out
+    }
+}
+
 /** What a callback recorded (neton_quic_tls.h NETON_QTLS_FAIL_*). */
 enum class QuicTlsFailure { NONE, INTERNAL, UNEXPECTED_MESSAGE, CALLBACK }
 
@@ -224,4 +247,7 @@ internal expect object QuicTlsPrimitives {
     fun takeKeyLog(connection: Long): ByteArray
     fun export(connection: Long, output: ByteArray, label: String, context: ByteArray): Int
     fun cleanShutdown(connection: Long)
+    fun isCertificate(der: ByteArray): Boolean
+    fun isPrivateKey(key: ByteArray, pem: Boolean): Boolean
+    fun pemCertificates(pem: ByteArray): ByteArray
 }

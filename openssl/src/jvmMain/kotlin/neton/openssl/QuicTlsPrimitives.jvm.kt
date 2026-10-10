@@ -35,4 +35,7 @@ internal actual object QuicTlsPrimitives {
     actual fun takeKeyLog(connection: Long): ByteArray = Jni.qtlsTakeKeyLog(connection)
     actual fun export(connection: Long, output: ByteArray, label: String, context: ByteArray): Int = Jni.qtlsExport(connection, output, label, context)
     actual fun cleanShutdown(connection: Long) = Jni.qtlsCleanShutdown(connection)
+    actual fun isCertificate(der: ByteArray): Boolean = Jni.qtlsIsCertificate(der)
+    actual fun isPrivateKey(key: ByteArray, pem: Boolean): Boolean = Jni.qtlsIsPrivateKey(key, pem)
+    actual fun pemCertificates(pem: ByteArray): ByteArray = Jni.qtlsPemCertificates(pem)
 }

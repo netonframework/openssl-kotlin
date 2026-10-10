@@ -211,4 +211,17 @@ class QuicTlsTest {
             assertTrue(client.tls.takeKeyLog().isEmpty(), "taken once")
         } finally { client.tls.close(); server.tls.close(); s.close(); c.close() }
     }
+
+    @Test fun credentialsAreChecked() {
+        val certs = QuicTlsCredentials.pemCertificates(identity.certificate + identity.certificate)
+        assertEquals(2, certs.size)
+        assertContentEquals(der(identity.certificate), certs[0])
+        assertTrue(QuicTlsCredentials.isCertificate(certs[0]))
+        assertFalse(QuicTlsCredentials.isCertificate(certs[0] + byteArrayOf(0)))
+        assertFalse(QuicTlsCredentials.isCertificate(byteArrayOf(1, 2, 3)))
+        assertTrue(QuicTlsCredentials.pemCertificates("no certificate here".encodeToByteArray()).isEmpty())
+        assertTrue(QuicTlsCredentials.isPrivateKey(identity.key, pem = true))
+        assertFalse(QuicTlsCredentials.isPrivateKey(identity.key, pem = false))
+        assertFalse(QuicTlsCredentials.isPrivateKey(identity.certificate, pem = true))
+    }
 }

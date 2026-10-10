@@ -98,6 +98,9 @@ internal object Jni {
     @JvmStatic external fun qtlsTakeKeyLog(connection: Long): ByteArray
     @JvmStatic external fun qtlsExport(connection: Long, output: ByteArray, label: String, context: ByteArray): Int
     @JvmStatic external fun qtlsCleanShutdown(connection: Long)
+    @JvmStatic external fun qtlsIsCertificate(der: ByteArray): Boolean
+    @JvmStatic external fun qtlsIsPrivateKey(key: ByteArray, pem: Boolean): Boolean
+    @JvmStatic external fun qtlsPemCertificates(pem: ByteArray): ByteArray
 }
 
 /**

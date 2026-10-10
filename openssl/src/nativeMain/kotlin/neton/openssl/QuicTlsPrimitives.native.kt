@@ -73,4 +73,7 @@ internal actual object QuicTlsPrimitives {
     actual fun export(connection: Long, output: ByteArray, label: String, context: ByteArray): Int =
         output.withBytes { o -> context.withBytes { c -> neton_qtls_export(conn(connection), o, output.size, label, label.length, c, context.size) } }
     actual fun cleanShutdown(connection: Long) = neton_qtls_clean_shutdown(conn(connection))
+    actual fun isCertificate(der: ByteArray): Boolean = der.withBytes { neton_qtls_is_certificate(it, der.size) } == 1
+    actual fun isPrivateKey(key: ByteArray, pem: Boolean): Boolean = key.withBytes { neton_qtls_is_private_key(it, key.size, if (pem) 1 else 0) } == 1
+    actual fun pemCertificates(pem: ByteArray): ByteArray = pem.withBytes { p -> sized { neton_qtls_pem_certificates(p, pem.size, it) } }
 }

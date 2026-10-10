@@ -521,6 +521,45 @@ static inline int neton_qtls_export(neton_qtls *q, unsigned char *out, int size,
     ERR_clear_error();
     return SSL_export_keying_material(q->ssl, out, (size_t)size, label, (size_t)label_size, context, (size_t)context_size, 1);
 }
+/* ---- credentials --------------------------------------------------------------------------------------------- */
+
+/* Whether [der] is exactly one X.509 certificate. */
+static inline int neton_qtls_is_certificate(const unsigned char *der, int size) {
+    const unsigned char *p = der; X509 *x = d2i_X509(NULL, &p, size); int ok = x != NULL && p == der + size;
+    X509_free(x); ERR_clear_error(); return ok;
+}
+/* Whether [key] is an unencrypted private key: PEM, or DER (PKCS#8 or a traditional RSA / EC key). */
+static inline int neton_qtls_is_private_key(const unsigned char *key, int size, int pem) {
+    EVP_PKEY *pkey = NULL;
+    if (pem) {
+        BIO *bio = BIO_new_mem_buf(key, size);
+        if (bio) { pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, (void *)""); BIO_free(bio); }
+    } else {
+        const unsigned char *p = key; pkey = d2i_AutoPrivateKey(NULL, &p, size);
+    }
+    ERR_clear_error();
+    if (!pkey) return 0;
+    EVP_PKEY_free(pkey); return 1;
+}
+/* The CERTIFICATE blocks of a PEM document as [u32 length][DER] records into [out] (NULL: the total size). */
+static inline int neton_qtls_pem_certificates(const unsigned char *pem, int size, unsigned char *out) {
+    BIO *bio = BIO_new_mem_buf(pem, size); X509 *x; int total = 0;
+    if (!bio) return -1;
+    while ((x = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL) {
+        int n = i2d_X509(x, NULL);
+        if (n > 0 && out) {
+            unsigned char *p = out + total + 4;
+            out[total] = (unsigned char)(n >> 24); out[total + 1] = (unsigned char)(n >> 16);
+            out[total + 2] = (unsigned char)(n >> 8); out[total + 3] = (unsigned char)n;
+            i2d_X509(x, &p);
+        }
+        if (n > 0) total += 4 + n;
+        X509_free(x);
+    }
+    BIO_free(bio); ERR_clear_error();   /* the "no start line" that ends the loop */
+    return total;
+}
+
 /* QUIC ends with CONNECTION_CLOSE, not close_notify: mark a clean end so the server keeps the session for tickets. */
 static inline void neton_qtls_clean_shutdown(neton_qtls *q) { SSL_set_shutdown(q->ssl, SSL_SENT_SHUTDOWN | SSL_RECEIVED_SHUTDOWN); }
 #endif

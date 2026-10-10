@@ -577,3 +577,42 @@ JNIEXPORT jint JNICALL FN(qtlsExport)(JNIEnv *env, jclass cls, jlong h, jbyteArr
 }
 JNIEXPORT void JNICALL FN(qtlsCleanShutdown)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; neton_qtls_clean_shutdown(QTLS(h)); }
 
+JNIEXPORT jboolean JNICALL FN(qtlsIsCertificate)(JNIEnv *env, jclass cls, jbyteArray der) {
+    jint n = (*env)->GetArrayLength(env, der);
+    jbyte *p = PIN(env, der, n);
+    int ok = 0;
+    (void)cls;
+    if (p) ok = neton_qtls_is_certificate((const unsigned char *)p, n);
+    UNPIN(env, der, p, JNI_ABORT);
+    return ok == 1;
+}
+JNIEXPORT jboolean JNICALL FN(qtlsIsPrivateKey)(JNIEnv *env, jclass cls, jbyteArray key, jboolean pem) {
+    jint n = (*env)->GetArrayLength(env, key);
+    jbyte *p = PIN(env, key, n);
+    int ok = 0;
+    (void)cls;
+    if (p) ok = neton_qtls_is_private_key((const unsigned char *)p, n, pem ? 1 : 0);
+    UNPIN(env, key, p, JNI_ABORT);
+    return ok == 1;
+}
+/* The PEM reader runs twice (size, then bytes): no JNI call happens while the arrays are pinned. */
+JNIEXPORT jbyteArray JNICALL FN(qtlsPemCertificates)(JNIEnv *env, jclass cls, jbyteArray pem) {
+    jint n = (*env)->GetArrayLength(env, pem), total;
+    jbyte *p, *o;
+    jbyteArray out;
+    (void)cls;
+    if (n == 0) return (*env)->NewByteArray(env, 0);
+    p = (*env)->GetPrimitiveArrayCritical(env, pem, NULL);
+    if (!p) return NULL;
+    total = neton_qtls_pem_certificates((const unsigned char *)p, n, NULL);
+    (*env)->ReleasePrimitiveArrayCritical(env, pem, p, JNI_ABORT);
+    out = (*env)->NewByteArray(env, total > 0 ? total : 0);
+    if (!out || total <= 0) return out;
+    p = (*env)->GetPrimitiveArrayCritical(env, pem, NULL);
+    o = (*env)->GetPrimitiveArrayCritical(env, out, NULL);
+    if (p && o) neton_qtls_pem_certificates((const unsigned char *)p, n, (unsigned char *)o);
+    if (o) (*env)->ReleasePrimitiveArrayCritical(env, out, o, 0);
+    if (p) (*env)->ReleasePrimitiveArrayCritical(env, pem, p, JNI_ABORT);
+    return out;
+}
+
