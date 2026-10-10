@@ -1,20 +1,46 @@
+@file:OptIn(kotlin.concurrent.atomics.ExperimentalAtomicApi::class)
 package neton.openssl
 
-import kotlinx.cinterop.*
-import neton.openssl.c.*
+import kotlin.concurrent.atomics.AtomicInt
 
 enum class AeadAlgorithm(val keySize: Int) { AES_128_GCM(16), AES_256_GCM(32), CHACHA20_POLY1305(32) }
 enum class MaskAlgorithm(val keySize: Int) { AES_128(16), AES_256(32), CHACHA20(32) }
 enum class DigestAlgorithm(val outputSize: Int) { SHA1(20), SHA256(32), SHA384(48), SHA512(64) }
 
+/** A native key context: one operation at a time, released once by [close]; no suspension inside [access]. */
+internal class KeyHandle(private var handle: Long, private val release: (Long) -> Unit) : AutoCloseable {
+    private val busy = AtomicInt(0)
+
+    inline fun <R> access(block: (Long) -> R): R {
+        check(busy.compareAndSet(0, 1)) { "Concurrent or reentrant native handle access" }
+        try {
+            check(handle != 0L) { "Native handle is closed" }
+            return block(handle)
+        } finally {
+            busy.store(0)
+        }
+    }
+
+    override fun close() {
+        check(busy.compareAndSet(0, 1)) { "Concurrent close/use of native handle" }
+        try {
+            val h = handle
+            if (h != 0L) { handle = 0L; release(h) }
+        } finally {
+            busy.store(0)
+        }
+    }
+}
+
 /** Reusable key. One operation at a time; caller MUST ensure nonce uniqueness for encryption. */
 class AeadKey(algorithm: AeadAlgorithm, key: ByteArray) : AutoCloseable {
-    private val handle: NativeHandle<neton_aead>
+    private val handle: KeyHandle
     init {
         require(key.size == algorithm.keySize)
-        ERR_clear_error()
-        handle = NativeHandle(key.withBytes { neton_aead_new(algorithm.ordinal, it) }
-            ?: throw sslFailure("AEAD key creation"), ::neton_aead_free)
+        Primitives.clearErrors()
+        val h = Primitives.aeadNew(algorithm.ordinal, key)
+        if (h == 0L) throw sslFailure("AEAD key creation")
+        handle = KeyHandle(h, Primitives::aeadFree)
     }
 
     /** Replaces plaintext and appends a 16-byte tag; returns total ciphertext length. */
@@ -22,11 +48,8 @@ class AeadKey(algorithm: AeadAlgorithm, key: ByteArray) : AutoCloseable {
         require(plaintextLength >= 0 && plaintextLength <= Int.MAX_VALUE - 16)
         checkRange(data, offset, plaintextLength + 16)
         require(nonce.size == 12 && data !== nonce && data !== aad)
-        handle.access { ctx ->
-            val result = data.withBytes(offset, plaintextLength + 16) { out -> nonce.withBytes { iv -> aad.withBytes { ad ->
-                neton_aead_seal(ctx, out, plaintextLength, iv, ad, aad.size)
-            } } }
-            if (result != 1) throw sslFailure("AEAD seal")
+        handle.access { h ->
+            if (Primitives.aeadSeal(h, data, offset, plaintextLength, nonce, aad) != 1) throw sslFailure("AEAD seal")
         }
         return plaintextLength + 16
     }
@@ -36,10 +59,8 @@ class AeadKey(algorithm: AeadAlgorithm, key: ByteArray) : AutoCloseable {
         require(ciphertextLength >= 16)
         checkRange(data, offset, ciphertextLength)
         require(nonce.size == 12 && data !== nonce && data !== aad)
-        return handle.access { ctx ->
-            val result = data.withBytes(offset, ciphertextLength) { out -> nonce.withBytes { iv -> aad.withBytes { ad ->
-                neton_aead_open(ctx, out, ciphertextLength - 16, iv, ad, aad.size)
-            } } }
+        return handle.access { h ->
+            val result = Primitives.aeadOpen(h, data, offset, ciphertextLength - 16, nonce, aad)
             if (result < 0) throw sslFailure("AEAD open")
             result == 1
         }
@@ -49,21 +70,19 @@ class AeadKey(algorithm: AeadAlgorithm, key: ByteArray) : AutoCloseable {
 
 /** Primitive only: packet format, sampling offsets and mask application belong to the protocol. */
 class HeaderProtectionKey(algorithm: MaskAlgorithm, key: ByteArray) : AutoCloseable {
-    private val handle: NativeHandle<neton_mask>
+    private val handle: KeyHandle
     init {
         require(key.size == algorithm.keySize)
-        ERR_clear_error()
-        handle = NativeHandle(key.withBytes { neton_mask_new(algorithm.ordinal, it) }
-            ?: throw sslFailure("Header protection key"), ::neton_mask_free)
+        Primitives.clearErrors()
+        val h = Primitives.maskNew(algorithm.ordinal, key)
+        if (h == 0L) throw sslFailure("Header protection key")
+        handle = KeyHandle(h, Primitives::maskFree)
     }
     fun mask(sample: ByteArray, sampleOffset: Int, output: ByteArray, outputOffset: Int = 0) {
         checkRange(sample, sampleOffset, 16); checkRange(output, outputOffset, 5)
         require(sample !== output) { "Sample and output must not alias" }
-        handle.access { ctx ->
-            val result = sample.withBytes(sampleOffset, 16) { src -> output.withBytes(outputOffset, 5) { dst ->
-                neton_mask_apply(ctx, src, dst)
-            } }
-            if (result != 1) throw sslFailure("Header protection mask")
+        handle.access { h ->
+            if (Primitives.maskApply(h, sample, sampleOffset, output, outputOffset) != 1) throw sslFailure("Header protection mask")
         }
     }
     override fun close() = handle.close()
@@ -74,20 +93,18 @@ object Crypto {
     fun digest(algorithm: DigestAlgorithm, input: ByteArray, output: ByteArray, outputOffset: Int = 0) {
         checkRange(output, outputOffset, algorithm.outputSize)
         require(input !== output)
-        val result = input.withBytes { src -> output.withBytes(outputOffset, algorithm.outputSize) { dst ->
-            neton_hash(algorithm.ordinal, src, input.size, dst)
-        } }
-        if (result != 1) { output.fill(0, outputOffset, outputOffset + algorithm.outputSize); throw sslFailure("Digest") }
+        if (Primitives.hash(algorithm.ordinal, input, output, outputOffset) != 1) {
+            output.fill(0, outputOffset, outputOffset + algorithm.outputSize); throw sslFailure("Digest")
+        }
     }
 
     fun hmac(algorithm: DigestAlgorithm, key: ByteArray, input: ByteArray, output: ByteArray, outputOffset: Int = 0) {
         require(algorithm == DigestAlgorithm.SHA256 || algorithm == DigestAlgorithm.SHA384)
         checkRange(output, outputOffset, algorithm.outputSize)
         require(output !== key && output !== input)
-        val result = key.withBytes { secret -> input.withBytes { src -> output.withBytes(outputOffset, algorithm.outputSize) { dst ->
-            neton_hmac(algorithm.ordinal, secret, key.size, src, input.size, dst)
-        } } }
-        if (result != 1) { output.fill(0, outputOffset, outputOffset + algorithm.outputSize); throw sslFailure("HMAC") }
+        if (Primitives.hmac(algorithm.ordinal, key, input, output, outputOffset) != 1) {
+            output.fill(0, outputOffset, outputOffset + algorithm.outputSize); throw sslFailure("HMAC")
+        }
     }
 
     fun hkdfExtract(algorithm: DigestAlgorithm, salt: ByteArray, inputKey: ByteArray, output: ByteArray, offset: Int = 0) {
@@ -114,19 +131,18 @@ object Crypto {
         checkRange(output, offset, length)
         require(output !== key && output !== salt && output !== info)
         if (length == 0) return
-        val result = key.withBytes { secret -> salt.withBytes { sa -> info.withBytes { inf -> output.withBytes(offset, length) { dst ->
-            neton_hkdf(algorithm.ordinal, if (expand) 1 else 0, secret, key.size, sa, salt.size, inf, info.size, dst, length)
-        } } } }
-        if (result != 1) { output.fill(0, offset, offset + length); throw sslFailure("HKDF") }
+        if (Primitives.hkdf(algorithm.ordinal, expand, key, salt, info, output, offset, length) != 1) {
+            output.fill(0, offset, offset + length); throw sslFailure("HKDF")
+        }
     }
 
     /** Equal-length contents are compared in constant time; lengths are public. */
     fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean {
         if (a.size != b.size) return false
         if (a.isEmpty()) return true
-        return a.withBytes { left -> b.withBytes { right -> CRYPTO_memcmp(left, right, a.size.convert()) == 0 } }
+        return Primitives.constantTimeEquals(a, b)
     }
     /** Best-effort overwrite of this array, not historical GC copies. */
-    fun wipe(array: ByteArray) = array.withBytes { if (it != null) OPENSSL_cleanse(it, array.size.convert()) }
+    fun wipe(array: ByteArray) { if (array.isNotEmpty()) Primitives.wipe(array) }
     private val EMPTY = ByteArray(0)
 }

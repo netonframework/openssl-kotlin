@@ -16,6 +16,10 @@ jobs:
         run: |
           if [ "$(uname -m)" = arm64 ]; then TARGET=macosArm64; else TARGET=macosX64; fi
           ./gradlew -PnativeTargets=$TARGET :openssl:${TARGET}Test --console=plain
+      - name: Test JVM (JNI library from this host's OpenSSL, docs/JVM.md)
+        run: |
+          if [ "$(uname -m)" = arm64 ]; then TARGET=macosArm64; else TARGET=macosX64; fi
+          ./gradlew -PnativeTargets=$TARGET :openssl:jvmTest --console=plain
       - name: Validate external Maven consumer
         run: |
           ./gradlew :openssl:publishToMavenLocal --console=plain
@@ -41,6 +45,8 @@ jobs:
           "$HOME/.konan/kotlin-native-prebuilt-linux-x86_64-2.4.20/bin/konanc" scripts/bootstrap.kt -target linux_x64 -produce library -o build/bootstrap
       - name: Test Linux x64
         run: ./gradlew -PnativeTargets=linuxX64 :openssl:linuxX64Test --console=plain
+      - name: Test JVM (JNI library from the Linux x64 OpenSSL, docs/JVM.md)
+        run: ./gradlew -PnativeTargets=linuxX64 :openssl:jvmTest --console=plain
       - name: Validate external Maven consumer
         run: |
           ./gradlew -PnativeTargets=linuxX64 :openssl:publishToMavenLocal --console=plain

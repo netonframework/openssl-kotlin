@@ -5,10 +5,6 @@ import kotlinx.cinterop.*
 import kotlin.concurrent.atomics.AtomicInt
 import neton.openssl.c.*
 
-internal fun checkRange(array: ByteArray, offset: Int, length: Int) {
-    require(offset >= 0 && length >= 0 && offset <= array.size && length <= array.size - offset) { "Invalid buffer range" }
-}
-
 internal inline fun <T> ByteArray.withBytes(offset: Int = 0, length: Int = size - offset, block: (CPointer<UByteVar>?) -> T): T {
     checkRange(this, offset, length)
     return if (length == 0) block(null) else usePinned { block(it.addressOf(offset).reinterpret()) }
@@ -48,11 +44,4 @@ internal class SharedNativeHandle<T : CPointed>(private val pointer: CPointer<T>
         if (readers.compareAndSet(0, -1)) release(pointer)
         else check(readers.load() == -1) { "Close requires no concurrent factory operation" }
     }
-}
-
-internal fun sslFailure(operation: String): OpenSslException = memScoped {
-    val buffer = allocArray<ByteVar>(256)
-    val messages = mutableListOf<String>()
-    while (neton_openssl_next_error(buffer, 256u) != 0) messages += buffer.toKString()
-    OpenSslException("$operation failed: ${messages.joinToString("; ").ifEmpty { "no error detail" }}")
 }

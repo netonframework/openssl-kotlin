@@ -3,7 +3,8 @@
 Status: initial binding implemented; cross-platform runtime release gates remain open.
 Not a production TLS adapter. See VALIDATION.md for executed tests versus cross-link checks.
 
-1. `com.netonstream:openssl` is an independent native dependency. neton-io core remains independent.
+1. `com.netonstream:openssl` is an independent dependency, native and (since 2026-10-11, docs/JVM.md) JVM through JNI
+   over the same static OpenSSL. neton-io core remains independent.
 2. Initial upstream version is exactly 4.0.2. Source SHA-256 is pinned in gradle.properties and
    verified before extraction, including cached archives. Support starts at the 4.0 line.
 3. Build libcrypto and libssl statically, with assembly enabled, no loadable modules and no legacy
@@ -33,3 +34,20 @@ table is authoritative for implemented versus deferred functionality. No entire-
 claim. QUIC's transport, crypto-secret delivery lifetime and 0-RTT replay policy must not be
 collapsed into the TLS byte-stream API. OpenSSL's third-party QUIC TLS raw functions remain
 available but their safe facade is not implemented by this increment.
+
+## JVM, phase 1 (2026-10-11)
+
+docs/JVM.md is the plan. Phase 1 done:
+- The facade's platform-independent part (`AeadKey`, `HeaderProtectionKey`, `Crypto`, `OpenSsl`, argument checks,
+  error collection) moved to commonMain; the primitives behind it are `internal expect object Primitives` with long
+  handles: cinterop on native (unchanged C shim), JNI on the JVM (`src/jvmNative/neton_openssl_jni.c`, 17 entry
+  points that pin arrays only for the call and call the same `neton_*` shim functions).
+- `scripts/build-jni.sh` links the JNI library against the host target's static OpenSSL, exporting only `Java_*`
+  (macOS: exported-symbol list; Linux: version script, Kotlin/Native toolchain and sysroot for the same libc baseline).
+  OpenSSL is now built with `-fPIC` on every target so its archives can link into the shared library.
+- The jar carries `META-INF/native/<os>-<arch>/`; `NativeLibrary` loads `neton.openssl.library` if set, the app's own
+  library on Android, otherwise the jar's copy for this platform; a missing one is an `UnsatisfiedLinkError` naming it.
+- Tests: `CryptoTest` and the runtime checks (`OpenSslRuntimeTest`) are in commonTest and run on both. macOS arm64:
+  JVM 10, native 26 tests, no failures. Before Gradle, a javac smoke test checked the JNI layer against RFC 4231, RFC
+  5869 and RFC 9001 A.2 vectors. CI runs `jvmTest` on macOS and Linux x64 hosts.
+

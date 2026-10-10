@@ -20,8 +20,9 @@ if [[ ! -f "$ARCHIVE" ]]; then
 fi
 [[ "$(digest "$ARCHIVE" | awk '{print $1}')" == "$SHA" ]] || { echo "Cached source checksum mismatch" >&2; exit 1; }
 
-# No shared libraries or loadable providers: consumers receive a self-contained static build.
-FLAGS=(no-shared no-module no-tests no-legacy --libdir=lib "--prefix=$PREFIX" "--openssldir=$PREFIX/ssl")
+# No shared libraries or loadable providers: consumers receive a self-contained static build. Position-independent
+# code everywhere, so the same archives also link into the JVM's JNI library (scripts/build-jni.sh, docs/JVM.md).
+FLAGS=(no-shared no-module no-tests no-legacy -fPIC --libdir=lib "--prefix=$PREFIX" "--openssldir=$PREFIX/ssl")
 case "$TARGET" in
     macosArm64|macosX64|iosArm64|iosSimulatorArm64|iosX64)
         [[ "$(uname -s)" == Darwin ]] || { echo "Apple targets require Xcode" >&2; exit 1; }

@@ -12,12 +12,31 @@ val host = when (System.getProperty("os.name")) {
     else -> error("Build on macOS or Linux; Windows cross builds use Linux + MinGW")
 }
 val supported = setOf("macosArm64", "macosX64", "linuxX64", "linuxArm64", "iosArm64", "iosSimulatorArm64", "iosX64", "mingwX64", "androidNativeArm64", "androidNativeX64")
+val jniPlatform = mapOf("macosArm64" to "macos-arm64", "macosX64" to "macos-x64", "linuxX64" to "linux-x64", "linuxArm64" to "linux-arm64").getValue(host)
+val jniResources = layout.buildDirectory.dir("jni-resources")
+val buildJni = tasks.register<Exec>("buildJni") {
+    val out = jniResources.map { it.dir("META-INF/native/$jniPlatform") }
+    inputs.files(rootProject.file("scripts/build-jni.sh"), rootProject.file("scripts/build-openssl.sh"), rootProject.file("gradle.properties"))
+    inputs.files(fileTree("src/jvmNative"), fileTree("src/nativeInterop/cinterop") { include("*.h") })
+    outputs.dir(jniResources)
+    environment("JNI_JAVA_HOME", System.getProperty("java.home"))
+    commandLine("bash", rootProject.file("scripts/build-jni.sh"), host, out.get().asFile.absolutePath)
+}
 val selected = providers.gradleProperty("nativeTargets").orElse(host).get().let {
     if (it == "all") supported else it.split(',').map(String::trim).toSet()
 }
 require(selected.isNotEmpty() && supported.containsAll(selected)) { "Unknown nativeTargets: $selected" }
 
 kotlin {
+    // The JVM (docs/JVM.md): JNI over the same static OpenSSL, for desktop JVMs and Android apps. Bytecode 1.8, API 2.2
+    // and stdlib 2.2.21 so Android hosts on Kotlin 2.1 can use it (neton-io's JVM target does the same).
+    coreLibrariesVersion = "2.2.21"
+    jvm {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+            apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
+        }
+    }
     if ("macosArm64" in selected) macosArm64()
     if ("macosX64" in selected) macosX64()
     if ("linuxX64" in selected) linuxX64()
@@ -60,9 +79,17 @@ kotlin {
     }
     sourceSets {
         commonTest.dependencies { implementation(kotlin("test")) }
-        all { languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi") }
+        jvmMain { resources.srcDir(jniResources) }
+        matching { it.name.startsWith("native") || it.name.startsWith("macos") || it.name.startsWith("linux") ||
+            it.name.startsWith("ios") || it.name.startsWith("mingw") || it.name.startsWith("android") || it.name.startsWith("apple") }
+            .configureEach { languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi") }
     }
 }
+
+// The JNI library for this host, packed as META-INF/native/<os>-<arch>/ (NativeLibrary): built from the host's
+// Kotlin/Native OpenSSL archives. The other platforms' libraries are built by CI on their hosts (docs/JVM.md).
+tasks.named("jvmProcessResources") { dependsOn(buildJni) }
+buildJni.configure { dependsOn(tasks.matching { it.name == "buildOpenSsl" + host.replaceFirstChar { c -> c.uppercase() } }) }
 
 val apiDocsJar = tasks.register<Jar>("apiDocsJar") {
     archiveClassifier.set("javadoc")
