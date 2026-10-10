@@ -51,3 +51,17 @@ docs/JVM.md is the plan. Phase 1 done:
   JVM 10, native 26 tests, no failures. Before Gradle, a javac smoke test checked the JNI layer against RFC 4231, RFC
   5869 and RFC 9001 A.2 vectors. CI runs `jvmTest` on macOS and Linux x64 hosts.
 
+## JVM, phase 2 (2026-10-11)
+
+- `TlsContext` / `TlsEngine` moved to commonMain unchanged in API and behaviour, over `internal expect object
+  TlsPrimitives` (context and engine as long handles). The shim gained functions for what Kotlin used to read from the
+  `neton_tls` struct or from OpenSSL macros (failed, pending write, verify and alert codes, the failure kind in
+  `TlsFailureKind` order, version and cipher names, the verify mode, cipher and default-path settings), so native and
+  JVM classify failures with the same C code. JNI: 33 more entry points (50 in all); strings are taken before any
+  array is pinned.
+- Tests: `TlsEngineTest` is in commonTest over fixed certificates (`TestIdentities.kt`: three valid until 2125, one
+  expired in 2021, generated once with the OpenSSL command line; the JVM cannot generate certificates), replacing the
+  C-API generator; the native-Worker sharing test stays native (`TlsWorkerTest`). macOS arm64: JVM 16, native 26
+  tests, no failures — on the JVM: TLS 1.2 and 1.3 fragmented handshakes, ALPN, exporter, write backpressure and
+  retry, the five typed failures, mutual TLS, close_notify versus truncation, invalid configuration and bounds.
+

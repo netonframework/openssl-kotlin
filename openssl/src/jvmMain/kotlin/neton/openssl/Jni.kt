@@ -27,6 +27,41 @@ internal object Jni {
     @JvmStatic external fun hkdf(algorithm: Int, expand: Boolean, key: ByteArray, salt: ByteArray?, info: ByteArray?, output: ByteArray, offset: Int, length: Int): Int
     @JvmStatic external fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean
     @JvmStatic external fun wipe(array: ByteArray)
+
+    // Byte-stream TLS (neton_tls.h).
+    @JvmStatic external fun tlsContextNew(minimum: Int, maximum: Int, verify: Int): Long
+    @JvmStatic external fun tlsContextFree(context: Long)
+    @JvmStatic external fun tlsVerifyMode(server: Boolean, clientAuthentication: Int): Int
+    @JvmStatic external fun tlsLimits(context: Long, depth: Int, bytes: Int)
+    @JvmStatic external fun tlsRoots(context: Long, pem: ByteArray): Int
+    @JvmStatic external fun tlsDefaultPaths(context: Long): Int
+    @JvmStatic external fun tlsIdentity(context: Long, chain: ByteArray, key: ByteArray): Int
+    @JvmStatic external fun tlsCipherList(context: Long, list: String): Int
+    @JvmStatic external fun tlsCipherSuites(context: Long, suites: String): Int
+    @JvmStatic external fun tlsGroups(context: Long, groups: String): Int
+    @JvmStatic external fun tlsNew(context: Long, server: Boolean, identity: String?, ip: Boolean, alpn: ByteArray, capacity: Int): Long
+    @JvmStatic external fun tlsFree(engine: Long)
+    @JvmStatic external fun tlsReady(engine: Long): Boolean
+    @JvmStatic external fun tlsFailed(engine: Long): Boolean
+    @JvmStatic external fun tlsPendingWrite(engine: Long): Int
+    @JvmStatic external fun tlsPendingCiphertext(engine: Long): Int
+    @JvmStatic external fun tlsSentClose(engine: Long): Boolean
+    @JvmStatic external fun tlsFailureKind(engine: Long): Int
+    @JvmStatic external fun tlsVerifyCode(engine: Long): Int
+    @JvmStatic external fun tlsAlertCode(engine: Long): Int
+    @JvmStatic external fun tlsAlpn(engine: Long): ByteArray?
+    @JvmStatic external fun tlsVersionName(engine: Long): String?
+    @JvmStatic external fun tlsCipherName(engine: Long): String?
+    @JvmStatic external fun tlsServerName(engine: Long): String?
+    @JvmStatic external fun tlsPeerDer(engine: Long, index: Int): ByteArray?
+    @JvmStatic external fun tlsHandshake(engine: Long): Int
+    @JvmStatic external fun tlsFeed(engine: Long, input: ByteArray, offset: Int, length: Int): Int
+    @JvmStatic external fun tlsDrain(engine: Long, output: ByteArray, offset: Int, length: Int): Int
+    @JvmStatic external fun tlsEof(engine: Long)
+    @JvmStatic external fun tlsRead(engine: Long, output: ByteArray, offset: Int, length: Int): Int
+    @JvmStatic external fun tlsWrite(engine: Long, input: ByteArray, offset: Int, length: Int): Int
+    @JvmStatic external fun tlsShutdown(engine: Long): Int
+    @JvmStatic external fun tlsExport(engine: Long, output: ByteArray, label: String, context: ByteArray?): Int
 }
 
 /**

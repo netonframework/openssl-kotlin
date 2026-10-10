@@ -1,64 +1,9 @@
 package neton.openssl
 
-import kotlinx.cinterop.*
-import neton.openssl.c.*
 import kotlin.test.*
-import kotlin.native.concurrent.Worker
-import kotlin.native.concurrent.TransferMode
 
-internal data class TestIdentity(val certificate: ByteArray, val key: ByteArray)
-
-/** Test fixture only, never part of production trust configuration. */
-internal fun testIdentity(expired: Boolean = false): TestIdentity = memScoped {
-    val keyContext = assertNotNull(EVP_PKEY_CTX_new_from_name(null, "EC", null))
-    val out = alloc<CPointerVar<EVP_PKEY>>()
-    out.value = null
-    try {
-        assertEquals(1, EVP_PKEY_keygen_init(keyContext))
-        assertEquals(1, EVP_PKEY_CTX_set_group_name(keyContext, "prime256v1"))
-        assertEquals(1, EVP_PKEY_generate(keyContext, out.ptr))
-    } finally { EVP_PKEY_CTX_free(keyContext) }
-    val key = assertNotNull(out.value); val cert = assertNotNull(X509_new())
-    try {
-        assertEquals(1, X509_set_version(cert, 2))
-        assertEquals(1, ASN1_INTEGER_set(X509_get_serialNumber(cert), 1))
-        assertNotNull(X509_gmtime_adj(X509_getm_notBefore(cert), -3600))
-        assertNotNull(X509_gmtime_adj(X509_getm_notAfter(cert), if (expired) -60 else 3600))
-        assertEquals(1, X509_set_pubkey(cert, key))
-        val subject = assertNotNull(X509_get_subject_name(cert))
-        assertEquals(1, X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_ASC, "localhost".cstr.ptr.reinterpret(), -1, -1, 0))
-        assertEquals(1, X509_set_issuer_name(cert, subject))
-        val san = assertNotNull(X509V3_EXT_conf_nid(null, null, NID_subject_alt_name, "DNS:localhost,IP:127.0.0.1"))
-        try { assertEquals(1, X509_add_ext(cert, san, -1)) } finally { X509_EXTENSION_free(san) }
-        assertTrue(X509_sign(cert, key, EVP_sha256()) > 0)
-        fun encode(writer: (CPointer<BIO>) -> Int): ByteArray {
-            val bio = assertNotNull(BIO_new(BIO_s_mem()))
-            try {
-                assertEquals(1, writer(bio))
-                val bytes = ByteArray(BIO_ctrl_pending(bio).toInt())
-                bytes.usePinned { assertEquals(bytes.size, BIO_read(bio, it.addressOf(0), bytes.size)) }
-                return bytes
-            } finally { BIO_free(bio) }
-        }
-        TestIdentity(encode { PEM_write_bio_X509(it, cert) }, encode { PEM_write_bio_PrivateKey(it, key, null, null, 0, null, null) })
-    } finally { X509_free(cert); EVP_PKEY_free(key) }
-}
-
+/** TlsContext / TlsEngine on every platform (native and JVM), over the fixed [testIdentity] certificates. */
 class TlsEngineTest {
-    @Test fun frozenContextCreatesEnginesAcrossThreads() {
-        val context = TlsContext(false, testIdentity().certificate)
-        val workers = List(4) { Worker.start() }
-        try {
-            val futures = workers.map { worker -> worker.execute(TransferMode.SAFE, { context }) { factory ->
-                repeat(200) { factory.newEngine(PeerIdentity.Dns("localhost")).close() }
-                200
-            } }
-            assertEquals(800, futures.sumOf { it.result })
-        } finally {
-            workers.forEach { it.requestTermination().result }
-            context.close()
-        }
-    }
     private class Wire(private val sender: TlsEngine, private val receiver: TlsEngine) {
         private val bytes = ByteArray(37)
         private var size = 0; private var offset = 0

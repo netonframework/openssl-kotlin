@@ -221,3 +221,157 @@ JNIEXPORT void JNICALL FN(wipe)(JNIEnv *env, jclass cls, jbyteArray array) {
     p = (*env)->GetPrimitiveArrayCritical(env, array, NULL);
     if (p) { OPENSSL_cleanse(p, (size_t)size); (*env)->ReleasePrimitiveArrayCritical(env, array, p, 0); }
 }
+
+/* ---- byte-stream TLS (neton_tls.h; TlsPrimitives on the JVM) ------------------------------------------------------ */
+
+#define CTX(h) FROM_HANDLE(SSL_CTX, h)
+#define TLS(h) FROM_HANDLE(neton_tls, h)
+
+/* Pins [array] (may be empty or null: then NULL) for one shim call. */
+#define PIN(env, array, size) ((size) > 0 ? (*(env))->GetPrimitiveArrayCritical((env), (array), NULL) : NULL)
+#define UNPIN(env, array, p, mode) do { if (p) (*(env))->ReleasePrimitiveArrayCritical((env), (array), (p), (mode)); } while (0)
+
+JNIEXPORT jlong JNICALL FN(tlsContextNew)(JNIEnv *env, jclass cls, jint minimum, jint maximum, jint verify) {
+    (void)env; (void)cls;
+    ERR_clear_error();
+    return to_handle(neton_tls_context_new(minimum, maximum, verify));
+}
+JNIEXPORT void JNICALL FN(tlsContextFree)(JNIEnv *env, jclass cls, jlong ctx) { (void)env; (void)cls; neton_tls_context_free(CTX(ctx)); }
+JNIEXPORT jint JNICALL FN(tlsVerifyMode)(JNIEnv *env, jclass cls, jboolean server, jint auth) {
+    (void)env; (void)cls; return neton_tls_verify_mode(server ? 1 : 0, auth);
+}
+JNIEXPORT void JNICALL FN(tlsLimits)(JNIEnv *env, jclass cls, jlong ctx, jint depth, jint bytes) {
+    (void)env; (void)cls; neton_tls_limits(CTX(ctx), depth, bytes);
+}
+JNIEXPORT jint JNICALL FN(tlsRoots)(JNIEnv *env, jclass cls, jlong ctx, jbyteArray pem) {
+    jint size = (*env)->GetArrayLength(env, pem);
+    jbyte *p = PIN(env, pem, size);
+    int ok = 0;
+    (void)cls;
+    if (p) ok = neton_tls_roots(CTX(ctx), (const unsigned char *)p, size);
+    UNPIN(env, pem, p, JNI_ABORT);
+    return ok;
+}
+JNIEXPORT jint JNICALL FN(tlsDefaultPaths)(JNIEnv *env, jclass cls, jlong ctx) { (void)env; (void)cls; return neton_tls_default_paths(CTX(ctx)); }
+JNIEXPORT jint JNICALL FN(tlsIdentity)(JNIEnv *env, jclass cls, jlong ctx, jbyteArray chain, jbyteArray key) {
+    jint chainSize = (*env)->GetArrayLength(env, chain), keySize = (*env)->GetArrayLength(env, key);
+    jbyte *c = PIN(env, chain, chainSize), *k = PIN(env, key, keySize);
+    int ok = 0;
+    (void)cls;
+    if (c && k) ok = neton_tls_identity(CTX(ctx), (const unsigned char *)c, chainSize, (const unsigned char *)k, keySize);
+    UNPIN(env, key, k, JNI_ABORT);
+    UNPIN(env, chain, c, JNI_ABORT);
+    return ok;
+}
+
+typedef int (*neton_ctx_string_fn)(SSL_CTX *, const char *);
+static jint with_string(JNIEnv *env, jlong ctx, jstring value, neton_ctx_string_fn fn) {
+    const char *v = (*env)->GetStringUTFChars(env, value, NULL);
+    int ok;
+    if (!v) return 0;
+    ok = fn(CTX(ctx), v);
+    (*env)->ReleaseStringUTFChars(env, value, v);
+    return ok;
+}
+JNIEXPORT jint JNICALL FN(tlsCipherList)(JNIEnv *env, jclass cls, jlong ctx, jstring v) { (void)cls; return with_string(env, ctx, v, neton_tls_cipher_list); }
+JNIEXPORT jint JNICALL FN(tlsCipherSuites)(JNIEnv *env, jclass cls, jlong ctx, jstring v) { (void)cls; return with_string(env, ctx, v, neton_tls_cipher_suites); }
+JNIEXPORT jint JNICALL FN(tlsGroups)(JNIEnv *env, jclass cls, jlong ctx, jstring v) { (void)cls; return with_string(env, ctx, v, neton_tls_groups); }
+
+JNIEXPORT jlong JNICALL FN(tlsNew)(JNIEnv *env, jclass cls, jlong ctx, jboolean server, jstring identity, jboolean ip,
+                                   jbyteArray alpn, jint capacity) {
+    const char *id = identity ? (*env)->GetStringUTFChars(env, identity, NULL) : NULL;
+    jint alpnSize = (*env)->GetArrayLength(env, alpn);
+    jbyte *a;
+    neton_tls *engine = NULL;
+    (void)cls;
+    if (identity && !id) return 0;
+    a = PIN(env, alpn, alpnSize);
+    if (alpnSize == 0 || a) engine = neton_tls_new(CTX(ctx), server ? 1 : 0, id, ip ? 1 : 0, (const unsigned char *)a, alpnSize, capacity);
+    UNPIN(env, alpn, a, JNI_ABORT);
+    if (id) (*env)->ReleaseStringUTFChars(env, identity, id);
+    return to_handle(engine);
+}
+JNIEXPORT void JNICALL FN(tlsFree)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; neton_tls_free(TLS(e)); }
+
+JNIEXPORT jboolean JNICALL FN(tlsReady)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_ready(TLS(e)) == 1; }
+JNIEXPORT jboolean JNICALL FN(tlsFailed)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_failed(TLS(e)) != 0; }
+JNIEXPORT jint JNICALL FN(tlsPendingWrite)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_pending_write(TLS(e)); }
+JNIEXPORT jint JNICALL FN(tlsPendingCiphertext)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_pending(TLS(e)); }
+JNIEXPORT jboolean JNICALL FN(tlsSentClose)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_sent_close(TLS(e)) == 1; }
+JNIEXPORT jint JNICALL FN(tlsFailureKind)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_failure_kind(TLS(e)); }
+JNIEXPORT jint JNICALL FN(tlsVerifyCode)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_verify_code(TLS(e)); }
+JNIEXPORT jint JNICALL FN(tlsAlertCode)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_alert_code(TLS(e)); }
+
+static jstring maybe_string(JNIEnv *env, const char *value) { return value ? (*env)->NewStringUTF(env, value) : NULL; }
+JNIEXPORT jstring JNICALL FN(tlsVersionName)(JNIEnv *env, jclass cls, jlong e) { (void)cls; return maybe_string(env, neton_tls_version_name(TLS(e))); }
+JNIEXPORT jstring JNICALL FN(tlsCipherName)(JNIEnv *env, jclass cls, jlong e) { (void)cls; return maybe_string(env, neton_tls_cipher_name(TLS(e))); }
+JNIEXPORT jstring JNICALL FN(tlsServerName)(JNIEnv *env, jclass cls, jlong e) { (void)cls; return maybe_string(env, neton_tls_sni(TLS(e))); }
+
+/* The selected ALPN protocol's bytes, or null. */
+JNIEXPORT jbyteArray JNICALL FN(tlsAlpn)(JNIEnv *env, jclass cls, jlong e) {
+    unsigned char buffer[255];
+    int size = neton_tls_alpn_copy(TLS(e), NULL);
+    jbyteArray out;
+    (void)cls;
+    if (size <= 0 || size > 255) return NULL;
+    neton_tls_alpn_copy(TLS(e), buffer);
+    out = (*env)->NewByteArray(env, size);
+    if (out) (*env)->SetByteArrayRegion(env, out, 0, size, (const jbyte *)buffer);
+    return out;
+}
+
+/* DER of the peer certificate [index]: null past the end, an empty array on failure. */
+JNIEXPORT jbyteArray JNICALL FN(tlsPeerDer)(JNIEnv *env, jclass cls, jlong e, jint index) {
+    int size = neton_tls_peer_der(TLS(e), index, NULL);
+    unsigned char *buffer;
+    jbyteArray out;
+    (void)cls;
+    if (size == 0) return NULL;
+    if (size < 0) return (*env)->NewByteArray(env, 0);
+    buffer = OPENSSL_malloc((size_t)size);
+    if (!buffer || neton_tls_peer_der(TLS(e), index, buffer) != size) { OPENSSL_free(buffer); return (*env)->NewByteArray(env, 0); }
+    out = (*env)->NewByteArray(env, size);
+    if (out) (*env)->SetByteArrayRegion(env, out, 0, size, (const jbyte *)buffer);
+    OPENSSL_free(buffer);
+    return out;
+}
+
+JNIEXPORT jint JNICALL FN(tlsHandshake)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_handshake(TLS(e)); }
+JNIEXPORT void JNICALL FN(tlsEof)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; neton_tls_eof(TLS(e)); }
+JNIEXPORT jint JNICALL FN(tlsShutdown)(JNIEnv *env, jclass cls, jlong e) { (void)env; (void)cls; return neton_tls_shutdown(TLS(e)); }
+
+typedef int (*neton_tls_io_fn)(neton_tls *, unsigned char *, int);
+static jint tls_io(JNIEnv *env, jlong e, jbyteArray data, jint offset, jint length, int writes_array, neton_tls_io_fn fn) {
+    jbyte *p = (*env)->GetPrimitiveArrayCritical(env, data, NULL);
+    int n;
+    if (!p) return -1;
+    n = fn(TLS(e), (unsigned char *)p + offset, length);
+    (*env)->ReleasePrimitiveArrayCritical(env, data, p, writes_array ? 0 : JNI_ABORT);
+    return n;
+}
+static int feed_fn(neton_tls *t, unsigned char *d, int n) { return neton_tls_feed(t, d, n); }
+static int write_fn(neton_tls *t, unsigned char *d, int n) { return neton_tls_write(t, d, n); }
+JNIEXPORT jint JNICALL FN(tlsFeed)(JNIEnv *env, jclass cls, jlong e, jbyteArray d, jint o, jint n) { (void)cls; return tls_io(env, e, d, o, n, 0, feed_fn); }
+JNIEXPORT jint JNICALL FN(tlsDrain)(JNIEnv *env, jclass cls, jlong e, jbyteArray d, jint o, jint n) { (void)cls; return tls_io(env, e, d, o, n, 1, neton_tls_drain); }
+JNIEXPORT jint JNICALL FN(tlsRead)(JNIEnv *env, jclass cls, jlong e, jbyteArray d, jint o, jint n) { (void)cls; return tls_io(env, e, d, o, n, 1, neton_tls_read); }
+JNIEXPORT jint JNICALL FN(tlsWrite)(JNIEnv *env, jclass cls, jlong e, jbyteArray d, jint o, jint n) { (void)cls; return tls_io(env, e, d, o, n, 0, write_fn); }
+
+JNIEXPORT jint JNICALL FN(tlsExport)(JNIEnv *env, jclass cls, jlong e, jbyteArray output, jstring label, jbyteArray context) {
+    const char *l = (*env)->GetStringUTFChars(env, label, NULL);
+    jint labelSize = (*env)->GetStringUTFLength(env, label);
+    jint outSize = (*env)->GetArrayLength(env, output);
+    jint contextSize = context ? (*env)->GetArrayLength(env, context) : 0;
+    jbyte *o, *c;
+    int ok = 0;
+    (void)cls;
+    if (!l) return 0;
+    o = (*env)->GetPrimitiveArrayCritical(env, output, NULL);
+    c = PIN(env, context, contextSize);
+    if (o && (contextSize == 0 || c))
+        ok = neton_tls_export(TLS(e), (unsigned char *)o, outSize, l, labelSize, (const unsigned char *)c, contextSize, context ? 1 : 0);
+    UNPIN(env, context, c, JNI_ABORT);
+    UNPIN(env, output, o, 0);
+    (*env)->ReleaseStringUTFChars(env, label, l);
+    return ok;
+}
+

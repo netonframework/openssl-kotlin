@@ -180,4 +180,34 @@ static inline int neton_tls_peer_der(neton_tls *engine, int index, unsigned char
     return cert ? i2d_X509(cert, output ? &output : NULL) : 0;
 }
 static inline const char *neton_tls_sni(neton_tls *engine) { return SSL_get_servername(engine->ssl, TLSEXT_NAMETYPE_host_name); }
+
+/* Engine state and settings as functions, for callers that cannot read the struct or the macros (the JVM's JNI). */
+static inline int neton_tls_failed(neton_tls *engine) { return engine->failed; }
+static inline int neton_tls_pending_write(neton_tls *engine) { return engine->pending_size; }
+static inline int neton_tls_verify_code(neton_tls *engine) { return engine->verify; }
+static inline int neton_tls_alert_code(neton_tls *engine) { return engine->alert; }
+/* After a failure, in TlsFailureKind order: 0 certificate, 1 hostname, 2 expired, 3 unexpected EOF, 4 protocol. */
+static inline int neton_tls_failure_kind(neton_tls *engine) {
+    int verify = engine->verify;
+    if (verify == X509_V_ERR_HOSTNAME_MISMATCH || verify == X509_V_ERR_IP_ADDRESS_MISMATCH) return 1;
+    if (verify == X509_V_ERR_CERT_HAS_EXPIRED) return 2;
+    if (verify != X509_V_OK) return 0;
+    if (engine->reason == SSL_R_UNEXPECTED_EOF_WHILE_READING) return 3;
+    return 4;
+}
+static inline const char *neton_tls_version_name(neton_tls *engine) {
+    return SSL_is_init_finished(engine->ssl) ? SSL_get_version(engine->ssl) : NULL;
+}
+static inline const char *neton_tls_cipher_name(neton_tls *engine) {
+    return SSL_is_init_finished(engine->ssl) ? SSL_CIPHER_get_name(SSL_get_current_cipher(engine->ssl)) : NULL;
+}
+static inline int neton_tls_default_paths(SSL_CTX *ctx) { return SSL_CTX_set_default_verify_paths(ctx); }
+static inline int neton_tls_cipher_list(SSL_CTX *ctx, const char *list) { return SSL_CTX_set_cipher_list(ctx, list); }
+static inline int neton_tls_cipher_suites(SSL_CTX *ctx, const char *suites) { return SSL_CTX_set_ciphersuites(ctx, suites); }
+static inline void neton_tls_context_free(SSL_CTX *ctx) { SSL_CTX_free(ctx); }
+/* SSL_VERIFY_* for TlsContext's mode: client authentication none, request, require. */
+static inline int neton_tls_verify_mode(int server, int client_auth) {
+    int verify = (!server || client_auth != 0) ? SSL_VERIFY_PEER : SSL_VERIFY_NONE;
+    return verify | (client_auth == 2 ? SSL_VERIFY_FAIL_IF_NO_PEER_CERT : 0);
+}
 #endif
