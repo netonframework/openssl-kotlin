@@ -65,3 +65,22 @@ docs/JVM.md is the plan. Phase 1 done:
   tests, no failures — on the JVM: TLS 1.2 and 1.3 fragmented handshakes, ALPN, exporter, write backpressure and
   retry, the five typed failures, mutual TLS, close_notify versus truncation, invalid configuration and bounds.
 
+## JVM, phase 3: QUIC TLS facade (2026-10-11)
+
+docs/QUIC_TLS.md is the design. Gates 1 and 2 done:
+- `neton_quic_tls.h`: OpenSSL's third-party QUIC TLS callbacks in C (CRYPTO send / receive / release, secrets,
+  transport parameters, alerts) and the context callbacks (ALPN selection with server preference, the ClientHello
+  ALPN check, key log, new-session tickets), queueing per connection what quic's `TlsCore` kept in Kotlin, with the
+  same limits (64 KiB incoming, one outstanding record of at most 16384 bytes, 1 MiB outgoing), the first failure
+  kept, the key-change check and a test hook to fail a named callback once (a failing ticket callback only drops the
+  ticket). Contexts: TLS 1.3 only, no compression, suites, groups, verify mode, DER anchors, DER chain with a PEM or
+  DER key, session cache settings per side, session ID context on servers.
+- `QuicTlsContext` / `QuicTls` (commonMain) over `internal expect object QuicTlsPrimitives`; JNI: 34 more entry points
+  (84 in all).
+- `QuicTlsTest` (commonTest, 9 tests): a handshake with equal secrets per level and direction, exchanged transport
+  parameters, ALPN, SNI, peer certificate and exporter; a ticket resuming with 0-RTT accepted and equal early secrets;
+  no common ALPN (alert 120); an untrusted server; data after a key change (OpenSSL's alert 10 when it is in the same
+  record, the facade's own check otherwise); the 64 KiB bound; an injected callback failure; a failing ticket callback;
+  key-log lines. macOS arm64: JVM 25, native 35 tests, no failures.
+- Next (gate 3): quic's native `TlsSession` / `TlsConfig` move onto the facade with no behaviour change.
+

@@ -62,6 +62,42 @@ internal object Jni {
     @JvmStatic external fun tlsWrite(engine: Long, input: ByteArray, offset: Int, length: Int): Int
     @JvmStatic external fun tlsShutdown(engine: Long): Int
     @JvmStatic external fun tlsExport(engine: Long, output: ByteArray, label: String, context: ByteArray?): Int
+
+    // QUIC TLS (neton_quic_tls.h).
+    @JvmStatic external fun qtlsContextNew(server: Boolean, suites: String, groups: String?): Long
+    @JvmStatic external fun qtlsContextFree(context: Long)
+    @JvmStatic external fun qtlsContextVerify(context: Long, mode: Int)
+    @JvmStatic external fun qtlsContextAnchor(context: Long, der: ByteArray): Int
+    @JvmStatic external fun qtlsContextIdentity(context: Long, certs: ByteArray, sizes: IntArray, key: ByteArray, pem: Boolean): Int
+    @JvmStatic external fun qtlsContextKeyLog(context: Long)
+    @JvmStatic external fun qtlsNew(context: Long, server: Boolean, params: ByteArray, alpn: ByteArray, keyLog: Boolean): Long
+    @JvmStatic external fun qtlsFree(connection: Long)
+    @JvmStatic external fun qtlsServerName(connection: Long, name: String, ip: Boolean): Boolean
+    @JvmStatic external fun qtlsOfferAlpn(connection: Long, wire: ByteArray): Boolean
+    @JvmStatic external fun qtlsResume(connection: Long, der: ByteArray, early: Boolean, offered: ByteArray): Boolean
+    @JvmStatic external fun qtlsEnableEarlyData(connection: Long): Boolean
+    @JvmStatic external fun qtlsInject(connection: Long, callback: Int)
+    @JvmStatic external fun qtlsProvide(connection: Long, bytes: ByteArray): Boolean
+    @JvmStatic external fun qtlsIncoming(connection: Long): Int
+    @JvmStatic external fun qtlsDrive(connection: Long, complete: Boolean): Int
+    @JvmStatic external fun qtlsInitFinished(connection: Long): Boolean
+    @JvmStatic external fun qtlsTakeOutgoing(connection: Long, level: Int): ByteArray
+    @JvmStatic external fun qtlsTakeSecret(connection: Long, level: Int, direction: Int): ByteArray?
+    @JvmStatic external fun qtlsSuite(connection: Long, level: Int): Int
+    @JvmStatic external fun qtlsTakeEarlySecret(connection: Long): ByteArray?
+    @JvmStatic external fun qtlsPeerParams(connection: Long): ByteArray?
+    @JvmStatic external fun qtlsAlert(connection: Long): Int
+    @JvmStatic external fun qtlsFailure(connection: Long): Int
+    @JvmStatic external fun qtlsFailureMessage(connection: Long): String
+    @JvmStatic external fun qtlsAlpn(connection: Long): ByteArray?
+    @JvmStatic external fun qtlsSni(connection: Long): String?
+    @JvmStatic external fun qtlsEarlyAccepted(connection: Long): Boolean
+    @JvmStatic external fun qtlsPeerDer(connection: Long, index: Int): ByteArray?
+    @JvmStatic external fun qtlsTakeTickets(connection: Long): ByteArray
+    @JvmStatic external fun qtlsDroppedTickets(connection: Long): Int
+    @JvmStatic external fun qtlsTakeKeyLog(connection: Long): ByteArray
+    @JvmStatic external fun qtlsExport(connection: Long, output: ByteArray, label: String, context: ByteArray): Int
+    @JvmStatic external fun qtlsCleanShutdown(connection: Long)
 }
 
 /**

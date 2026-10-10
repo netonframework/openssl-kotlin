@@ -375,3 +375,205 @@ JNIEXPORT jint JNICALL FN(tlsExport)(JNIEnv *env, jclass cls, jlong e, jbyteArra
     return ok;
 }
 
+/* ---- QUIC TLS (neton_quic_tls.h; QuicTlsPrimitives on the JVM) ---------------------------------------------------- */
+
+#define QTLS(h) FROM_HANDLE(neton_qtls, h)
+
+typedef int (*neton_take_fn)(neton_qtls *, unsigned char *);
+/* A Java array of what [fn] reports (size with NULL, then the bytes); [empty_as_null]: null when there is nothing. */
+static jbyteArray take_array(JNIEnv *env, neton_qtls *q, neton_take_fn fn, int empty_as_null) {
+    int n = fn(q, NULL);
+    jbyteArray out;
+    jbyte *p;
+    if (n <= 0) return empty_as_null ? NULL : (*env)->NewByteArray(env, 0);
+    out = (*env)->NewByteArray(env, n);
+    if (!out) return NULL;
+    p = (*env)->GetPrimitiveArrayCritical(env, out, NULL);
+    if (p) { fn(q, (unsigned char *)p); (*env)->ReleasePrimitiveArrayCritical(env, out, p, 0); }
+    return out;
+}
+
+static jstring take_string_or_null(JNIEnv *env, jstring s, const char **chars) {
+    *chars = s ? (*env)->GetStringUTFChars(env, s, NULL) : NULL;
+    return s;
+}
+
+JNIEXPORT jlong JNICALL FN(qtlsContextNew)(JNIEnv *env, jclass cls, jboolean server, jstring suites, jstring groups) {
+    const char *su = (*env)->GetStringUTFChars(env, suites, NULL), *gr = NULL;
+    SSL_CTX *ctx = NULL;
+    (void)cls;
+    take_string_or_null(env, groups, &gr);
+    if (su && (!groups || gr)) ctx = neton_qtls_ctx_new(server ? 1 : 0, su, gr);
+    if (gr) (*env)->ReleaseStringUTFChars(env, groups, gr);
+    if (su) (*env)->ReleaseStringUTFChars(env, suites, su);
+    return to_handle(ctx);
+}
+JNIEXPORT void JNICALL FN(qtlsContextFree)(JNIEnv *env, jclass cls, jlong c) { (void)env; (void)cls; neton_qtls_ctx_free(CTX(c)); }
+JNIEXPORT void JNICALL FN(qtlsContextVerify)(JNIEnv *env, jclass cls, jlong c, jint mode) { (void)env; (void)cls; neton_qtls_ctx_verify(CTX(c), mode); }
+JNIEXPORT void JNICALL FN(qtlsContextKeyLog)(JNIEnv *env, jclass cls, jlong c) { (void)env; (void)cls; neton_qtls_ctx_keylog(CTX(c)); }
+JNIEXPORT jint JNICALL FN(qtlsContextAnchor)(JNIEnv *env, jclass cls, jlong c, jbyteArray der) {
+    jint n = (*env)->GetArrayLength(env, der);
+    jbyte *p = PIN(env, der, n);
+    int ok = 0;
+    (void)cls;
+    if (p) ok = neton_qtls_ctx_anchor(CTX(c), (const unsigned char *)p, n);
+    UNPIN(env, der, p, JNI_ABORT);
+    return ok;
+}
+JNIEXPORT jint JNICALL FN(qtlsContextIdentity)(JNIEnv *env, jclass cls, jlong c, jbyteArray certs, jintArray sizes,
+                                               jbyteArray key, jboolean pem) {
+    jint certsLen = (*env)->GetArrayLength(env, certs), count = (*env)->GetArrayLength(env, sizes), keyLen = (*env)->GetArrayLength(env, key);
+    jbyte *ce, *k;
+    jint *si;
+    int ok = 0;
+    (void)cls;
+    ce = PIN(env, certs, certsLen);
+    si = count > 0 ? (*env)->GetPrimitiveArrayCritical(env, sizes, NULL) : NULL;
+    k = PIN(env, key, keyLen);
+    if (ce && si && k) ok = neton_qtls_ctx_identity(CTX(c), (const unsigned char *)ce, (const int *)si, count,
+                                                    (const unsigned char *)k, keyLen, pem ? 1 : 0);
+    UNPIN(env, key, k, JNI_ABORT);
+    if (si) (*env)->ReleasePrimitiveArrayCritical(env, sizes, si, JNI_ABORT);
+    UNPIN(env, certs, ce, JNI_ABORT);
+    return ok;
+}
+
+JNIEXPORT jlong JNICALL FN(qtlsNew)(JNIEnv *env, jclass cls, jlong c, jboolean server, jbyteArray params, jbyteArray alpn, jboolean keylog) {
+    jint pn = (*env)->GetArrayLength(env, params), an = (*env)->GetArrayLength(env, alpn);
+    jbyte *p = PIN(env, params, pn), *a = PIN(env, alpn, an);
+    neton_qtls *q = NULL;
+    (void)cls;
+    if ((pn == 0 || p) && (an == 0 || a))
+        q = neton_qtls_new(CTX(c), server ? 1 : 0, (const unsigned char *)p, pn, (const unsigned char *)a, an, keylog ? 1 : 0);
+    UNPIN(env, alpn, a, JNI_ABORT);
+    UNPIN(env, params, p, JNI_ABORT);
+    return to_handle(q);
+}
+JNIEXPORT void JNICALL FN(qtlsFree)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; neton_qtls_free(QTLS(h)); }
+JNIEXPORT jboolean JNICALL FN(qtlsServerName)(JNIEnv *env, jclass cls, jlong h, jstring name, jboolean ip) {
+    const char *n = (*env)->GetStringUTFChars(env, name, NULL);
+    int ok = 0;
+    (void)cls;
+    if (n) { ok = neton_qtls_server_name(QTLS(h), n, ip ? 1 : 0); (*env)->ReleaseStringUTFChars(env, name, n); }
+    return ok == 1;
+}
+JNIEXPORT jboolean JNICALL FN(qtlsOfferAlpn)(JNIEnv *env, jclass cls, jlong h, jbyteArray wire) {
+    jint n = (*env)->GetArrayLength(env, wire);
+    jbyte *p = PIN(env, wire, n);
+    int ok = 0;
+    (void)cls;
+    if (n == 0 || p) ok = neton_qtls_offer_alpn(QTLS(h), (const unsigned char *)p, n);
+    UNPIN(env, wire, p, JNI_ABORT);
+    return ok == 1;
+}
+JNIEXPORT jboolean JNICALL FN(qtlsResume)(JNIEnv *env, jclass cls, jlong h, jbyteArray der, jboolean early, jbyteArray offered) {
+    jint dn = (*env)->GetArrayLength(env, der), on = (*env)->GetArrayLength(env, offered);
+    jbyte *d = PIN(env, der, dn), *o = PIN(env, offered, on);
+    int ok = 0;
+    (void)cls;
+    if (d && (on == 0 || o)) ok = neton_qtls_resume(QTLS(h), (const unsigned char *)d, dn, early ? 1 : 0, (const unsigned char *)o, on);
+    UNPIN(env, offered, o, JNI_ABORT);
+    UNPIN(env, der, d, JNI_ABORT);
+    return ok == 1;
+}
+JNIEXPORT jboolean JNICALL FN(qtlsEnableEarlyData)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; return neton_qtls_enable_early_data(QTLS(h)) == 1; }
+JNIEXPORT void JNICALL FN(qtlsInject)(JNIEnv *env, jclass cls, jlong h, jint cb) { (void)env; (void)cls; neton_qtls_inject(QTLS(h), cb); }
+JNIEXPORT jboolean JNICALL FN(qtlsProvide)(JNIEnv *env, jclass cls, jlong h, jbyteArray bytes) {
+    jint n = (*env)->GetArrayLength(env, bytes);
+    jbyte *p = PIN(env, bytes, n);
+    int ok = 0;
+    (void)cls;
+    if (n == 0 || p) ok = neton_qtls_provide(QTLS(h), (const unsigned char *)p, n);
+    UNPIN(env, bytes, p, JNI_ABORT);
+    return ok == 1;
+}
+JNIEXPORT jint JNICALL FN(qtlsIncoming)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; return neton_qtls_incoming(QTLS(h)); }
+JNIEXPORT jint JNICALL FN(qtlsDrive)(JNIEnv *env, jclass cls, jlong h, jboolean complete) { (void)env; (void)cls; return neton_qtls_drive(QTLS(h), complete ? 1 : 0); }
+JNIEXPORT jboolean JNICALL FN(qtlsInitFinished)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; return neton_qtls_init_finished(QTLS(h)) == 1; }
+
+JNIEXPORT jbyteArray JNICALL FN(qtlsTakeOutgoing)(JNIEnv *env, jclass cls, jlong h, jint level) {
+    int n = neton_qtls_take_out(QTLS(h), level, NULL);
+    jbyteArray out;
+    jbyte *p;
+    (void)cls;
+    out = (*env)->NewByteArray(env, n);
+    if (!out || n == 0) return out;
+    p = (*env)->GetPrimitiveArrayCritical(env, out, NULL);
+    if (p) { neton_qtls_take_out(QTLS(h), level, (unsigned char *)p); (*env)->ReleasePrimitiveArrayCritical(env, out, p, 0); }
+    return out;
+}
+JNIEXPORT jbyteArray JNICALL FN(qtlsTakeSecret)(JNIEnv *env, jclass cls, jlong h, jint level, jint direction) {
+    unsigned char secret[48];
+    int n = neton_qtls_take_secret(QTLS(h), level, direction, secret);
+    jbyteArray out;
+    (void)cls;
+    if (n <= 0) return NULL;
+    out = (*env)->NewByteArray(env, n);
+    if (out) (*env)->SetByteArrayRegion(env, out, 0, n, (const jbyte *)secret);
+    OPENSSL_cleanse(secret, sizeof secret);
+    return out;
+}
+JNIEXPORT jint JNICALL FN(qtlsSuite)(JNIEnv *env, jclass cls, jlong h, jint level) { (void)env; (void)cls; return neton_qtls_suite(QTLS(h), level); }
+JNIEXPORT jbyteArray JNICALL FN(qtlsTakeEarlySecret)(JNIEnv *env, jclass cls, jlong h) {
+    unsigned char secret[48];
+    int n = neton_qtls_take_early_secret(QTLS(h), secret);
+    jbyteArray out;
+    (void)cls;
+    if (n <= 0) return NULL;
+    out = (*env)->NewByteArray(env, n);
+    if (out) (*env)->SetByteArrayRegion(env, out, 0, n, (const jbyte *)secret);
+    OPENSSL_cleanse(secret, sizeof secret);
+    return out;
+}
+JNIEXPORT jbyteArray JNICALL FN(qtlsPeerParams)(JNIEnv *env, jclass cls, jlong h) {
+    int n = neton_qtls_peer_params(QTLS(h), NULL);
+    jbyteArray out;
+    jbyte *p;
+    (void)cls;
+    if (n < 0) return NULL;
+    out = (*env)->NewByteArray(env, n);
+    if (!out || n == 0) return out;
+    p = (*env)->GetPrimitiveArrayCritical(env, out, NULL);
+    if (p) { neton_qtls_peer_params(QTLS(h), (unsigned char *)p); (*env)->ReleasePrimitiveArrayCritical(env, out, p, 0); }
+    return out;
+}
+JNIEXPORT jint JNICALL FN(qtlsAlert)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; return neton_qtls_alert_sent(QTLS(h)); }
+JNIEXPORT jint JNICALL FN(qtlsFailure)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; return neton_qtls_failure(QTLS(h)); }
+JNIEXPORT jstring JNICALL FN(qtlsFailureMessage)(JNIEnv *env, jclass cls, jlong h) { (void)cls; return (*env)->NewStringUTF(env, neton_qtls_failure_message(QTLS(h))); }
+JNIEXPORT jbyteArray JNICALL FN(qtlsAlpn)(JNIEnv *env, jclass cls, jlong h) { (void)cls; return take_array(env, QTLS(h), neton_qtls_alpn, 1); }
+JNIEXPORT jstring JNICALL FN(qtlsSni)(JNIEnv *env, jclass cls, jlong h) { (void)cls; return maybe_string(env, neton_qtls_sni(QTLS(h))); }
+JNIEXPORT jboolean JNICALL FN(qtlsEarlyAccepted)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; return neton_qtls_early_accepted(QTLS(h)) == 1; }
+JNIEXPORT jbyteArray JNICALL FN(qtlsPeerDer)(JNIEnv *env, jclass cls, jlong h, jint index) {
+    int n = neton_qtls_peer_der(QTLS(h), index, NULL);
+    unsigned char *buffer;
+    jbyteArray out;
+    (void)cls;
+    if (n == 0) return NULL;
+    if (n < 0) return (*env)->NewByteArray(env, 0);
+    buffer = OPENSSL_malloc((size_t)n);
+    if (!buffer || neton_qtls_peer_der(QTLS(h), index, buffer) != n) { OPENSSL_free(buffer); return (*env)->NewByteArray(env, 0); }
+    out = (*env)->NewByteArray(env, n);
+    if (out) (*env)->SetByteArrayRegion(env, out, 0, n, (const jbyte *)buffer);
+    OPENSSL_free(buffer);
+    return out;
+}
+JNIEXPORT jbyteArray JNICALL FN(qtlsTakeTickets)(JNIEnv *env, jclass cls, jlong h) { (void)cls; return take_array(env, QTLS(h), neton_qtls_take_tickets, 0); }
+JNIEXPORT jint JNICALL FN(qtlsDroppedTickets)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; return neton_qtls_dropped_tickets(QTLS(h)); }
+JNIEXPORT jbyteArray JNICALL FN(qtlsTakeKeyLog)(JNIEnv *env, jclass cls, jlong h) { (void)cls; return take_array(env, QTLS(h), neton_qtls_take_keylog, 0); }
+JNIEXPORT jint JNICALL FN(qtlsExport)(JNIEnv *env, jclass cls, jlong h, jbyteArray output, jstring label, jbyteArray context) {
+    const char *l = (*env)->GetStringUTFChars(env, label, NULL);
+    jint labelLen = (*env)->GetStringUTFLength(env, label), outLen = (*env)->GetArrayLength(env, output), ctxLen = (*env)->GetArrayLength(env, context);
+    jbyte *o, *c;
+    int ok = 0;
+    (void)cls;
+    if (!l) return 0;
+    o = PIN(env, output, outLen);
+    c = PIN(env, context, ctxLen);
+    if (o && (ctxLen == 0 || c)) ok = neton_qtls_export(QTLS(h), (unsigned char *)o, outLen, l, labelLen, (const unsigned char *)c, ctxLen);
+    UNPIN(env, context, c, JNI_ABORT);
+    UNPIN(env, output, o, 0);
+    (*env)->ReleaseStringUTFChars(env, label, l);
+    return ok;
+}
+JNIEXPORT void JNICALL FN(qtlsCleanShutdown)(JNIEnv *env, jclass cls, jlong h) { (void)env; (void)cls; neton_qtls_clean_shutdown(QTLS(h)); }
+

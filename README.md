@@ -13,7 +13,8 @@ Kotlin compiler: **2.4.20** (no lower version is accepted by the build). Minimum
 - `TlsContext` / `TlsEngine`: bounded, socket-free TLS 1.2/1.3 with explicit trust and identity.
 - JVM (in progress, [docs/JVM.md](docs/JVM.md)): the same static OpenSSL through a JNI library exporting only its
   `Java_*` entry points. Available on the JVM so far: `OpenSsl`, `AeadKey`, `HeaderProtectionKey`, `Crypto`, `TlsContext` and
-  `TlsEngine`, built and tested on macOS and Linux x64 hosts. A QUIC TLS facade, Windows and Android follow.
+  `TlsEngine` and the QUIC TLS facade (`QuicTlsContext` / `QuicTls`, [docs/QUIC_TLS.md](docs/QUIC_TLS.md)), built and
+  tested on macOS and Linux x64 hosts. Windows and Android follow.
 - No dependency on neton-io, no socket ownership, no replacement cryptography or TLS implementation.
 - No TLS `IoStream` adapter or QUIC handshake adapter yet. Those are separate protocol integration work.
 
