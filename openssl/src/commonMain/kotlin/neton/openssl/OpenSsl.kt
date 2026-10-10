@@ -26,6 +26,16 @@ object OpenSsl {
         if (!Primitives.randomFill(output, offset, length)) { output.fill(0, offset, offset + length); throw sslFailure("RAND_bytes") }
     }
 
+    /** The OpenSSL errors queued on this thread, taken and joined with "; " (empty when none). */
+    fun takeErrors(): String {
+        val messages = mutableListOf<String>()
+        while (true) messages += Primitives.nextError() ?: break
+        return messages.joinToString("; ")
+    }
+
+    /** Empties this thread's OpenSSL error queue. */
+    fun clearErrors() = Primitives.clearErrors()
+
     fun sha256(input: ByteArray): ByteArray {
         val output = ByteArray(32)
         Crypto.digest(DigestAlgorithm.SHA256, input, output)
