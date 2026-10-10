@@ -369,9 +369,11 @@ static inline neton_qtls *neton_qtls_new(SSL_CTX *ctx, int server, const unsigne
     table[5].function_id = OSSL_FUNC_SSL_QUIC_TLS_ALERT; table[5].function = (void (*)(void))neton_qtls_alert;
     table[6].function_id = 0; table[6].function = NULL;
     if (SSL_set_quic_tls_cbs(q->ssl, table, q) != 1) goto fail;
-    q->own_params = OPENSSL_memdup(params, params_len > 0 ? (size_t)params_len : 1);
-    if (!q->own_params) goto fail;
+    /* At least one byte, so that empty parameters (possible with all defaults) still have a valid pointer. */
     q->own_params_len = params_len > 0 ? (size_t)params_len : 1;
+    q->own_params = OPENSSL_zalloc(q->own_params_len);
+    if (!q->own_params) goto fail;
+    if (params_len > 0) memcpy(q->own_params, params, (size_t)params_len);
     if (SSL_set_quic_tls_transport_params(q->ssl, q->own_params, (size_t)params_len) != 1) goto fail;
     if (SSL_set_quic_tls_early_data_enabled(q->ssl, 0) != 1) goto fail;
     if (server) SSL_set_accept_state(q->ssl); else SSL_set_connect_state(q->ssl);

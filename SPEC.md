@@ -83,4 +83,11 @@ docs/QUIC_TLS.md is the design. Gates 1 and 2 done:
   record, the facade's own check otherwise); the 64 KiB bound; an injected callback failure; a failing ticket callback;
   key-log lines. macOS arm64: JVM 25, native 35 tests, no failures.
 - Next (gate 3): quic's native `TlsSession` / `TlsConfig` move onto the facade with no behaviour change.
+- Gate 3 (2026-10-11): quic's `TlsSession` / `TlsConfig` / system-root parsing rewritten on the facade (quic branch
+  `tls-facade`, waiting for this library's release since quic's Windows CI cannot build OpenSSL from source): its full
+  suite passes on macOS arm64 with the test TLS double and with real TLS (624 tests each, 3 skipped as in quinn). Found
+  on the way: our transport parameters can be empty (all defaults), which the connection creation refused (fixed,
+  `emptyTransportParametersAreAllowed`). quic's record-lifetime test moved here with the callbacks
+  (`QuicTlsCallbacksTest`, on the C functions). `OpenSsl.takeErrors` / `clearErrors` give protocol libraries the
+  thread's error queue.
 

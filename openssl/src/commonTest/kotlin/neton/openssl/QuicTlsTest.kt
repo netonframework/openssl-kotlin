@@ -224,4 +224,10 @@ class QuicTlsTest {
         assertFalse(QuicTlsCredentials.isPrivateKey(identity.key, pem = false))
         assertFalse(QuicTlsCredentials.isPrivateKey(identity.certificate, pem = true))
     }
+
+    /** Our transport parameters may be empty (all defaults): the connection is still created (quic's default server). */
+    @Test fun emptyTransportParametersAreAllowed() {
+        val s = serverContext()
+        try { s.newConnection(ByteArray(0), wire("h3")).close() } finally { s.close() }
+    }
 }
