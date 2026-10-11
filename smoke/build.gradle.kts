@@ -10,5 +10,5 @@ kotlin {
         else -> error("Unsupported smoke-test host")
     }
     target.binaries.executable { entryPoint = "main" }
-    sourceSets.commonMain.dependencies { implementation("com.netonstream:openssl:4.0.2") }
+    sourceSets.commonMain.dependencies { implementation("com.netonstream:openssl:4.0.2-3") }
 }
