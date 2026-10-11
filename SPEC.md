@@ -91,3 +91,17 @@ docs/QUIC_TLS.md is the design. Gates 1 and 2 done:
   (`QuicTlsCallbacksTest`, on the C functions). `OpenSsl.takeErrors` / `clearErrors` give protocol libraries the
   thread's error queue.
 
+## JVM, Android (2026-10-11)
+
+- `scripts/build-jni.sh` builds the JNI library for Android with the NDK's clang (API 21): only the `Java_*` entry
+  points exported, NEEDED only libc and libdl, 16 KiB page alignment (Android 15+), stripped (5.7 MB for arm64-v8a).
+  `androidNativesAar` packs it as `openssl-android-natives` (`jni/<abi>/`, a manifest with minSdk 26, the license
+  files); on Android `NativeLibrary` loads it with `System.loadLibrary`.
+- Verified on the Pixel_9 emulator (Android 16, arm64-v8a, ART) without an app: msgtrans-kotlin's
+  `interop/android-smoke.sh` converts msgtrans-quic's JVM classes to dex and runs them with app_process next to the
+  library — a QUIC handshake (real TLS 1.3 through this library, UDP through Android's NIO) in 67-156 ms, echoes of
+  0 B to 1 MB and 100 concurrent requests, all matching.
+- x86_64 (emulators on Intel hosts): NDK 26.1's clang does not know OpenSSL 4.0's SM4 AVX instructions (`vsm4key4`),
+  so OpenSSL itself does not build for it with that NDK (the native androidNativeX64 target has the same limit); NDK
+  29 is the candidate. 32-bit ABIs are not supported (as for the native targets).
+

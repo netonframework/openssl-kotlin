@@ -44,6 +44,9 @@ written from quic's current use (quic SPEC §4's 12 capabilities) before it is m
 
 ## Phases and gates
 
+Status 2026-10-11: phases 1-6 done on macOS hosts and the Android emulator (SPEC.md); releases pending.
+
+
 1. Crypto on the JVM: build files, native loader, JNI for version / CSPRNG / digest / HMAC / HKDF / AEAD / header
    protection; the existing crypto tests moved to commonTest and run on the JVM (macOS host, Linux x64 in CI).
 2. Byte-stream TLS on the JVM: `TlsContext` / `TlsEngine`; the TLS tests (real handshakes, trust and hostname

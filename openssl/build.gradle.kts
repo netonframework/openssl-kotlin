@@ -89,6 +89,44 @@ kotlin {
 // The JNI library for this host, packed as META-INF/native/<os>-<arch>/ (NativeLibrary): built from the host's
 // Kotlin/Native OpenSSL archives. The other platforms' libraries are built by CI on their hosts (docs/JVM.md).
 tasks.named("jvmProcessResources") { dependsOn(buildJni) }
+
+// Android apps load native code only from an AAR's jni/<abi>/ (docs/JVM.md): the NDK-built libraries of
+// scripts/build-jni.sh for the Android targets (arm64-v8a; x86_64 needs an NDK whose clang knows OpenSSL 4.0's SM4
+// AVX instructions, 29+), packed with a manifest and an empty classes.jar; the classes are the JVM jar's.
+val androidAbis = mapOf("androidNativeArm64" to "arm64-v8a", "androidNativeX64" to "x86_64")
+val buildJniAndroid = androidAbis.keys.map { target ->
+    tasks.register<Exec>("buildJni" + target.replaceFirstChar { it.uppercase() }) {
+        val out = layout.buildDirectory.dir("jni-android/$target")
+        inputs.files(rootProject.file("scripts/build-jni.sh"), rootProject.file("scripts/build-openssl.sh"), rootProject.file("gradle.properties"))
+        inputs.files(fileTree("src/jvmNative"), fileTree("src/nativeInterop/cinterop") { include("*.h") })
+        outputs.dir(out)
+        environment("JNI_JAVA_HOME", System.getProperty("java.home"))
+        commandLine("bash", rootProject.file("scripts/build-jni.sh"), target, out.get().asFile.absolutePath)
+    }
+}
+val androidEmptyClasses = tasks.register<Jar>("androidEmptyClassesJar") {
+    archiveFileName.set("classes.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("android-aar"))
+}
+val androidManifest = layout.buildDirectory.file("android-aar/AndroidManifest.xml")
+tasks.register<Zip>("androidNativesAar") {
+    val abis = providers.gradleProperty("androidAbis").orElse("arm64-v8a").get().split(',')
+    archiveBaseName.set("openssl-android-natives")
+    archiveExtension.set("aar")
+    destinationDirectory.set(layout.buildDirectory.dir("android-aar"))
+    for ((target, abi) in androidAbis) if (abi in abis) {
+        dependsOn("buildJni" + target.replaceFirstChar { it.uppercase() })
+        from(layout.buildDirectory.dir("jni-android/$target")) { include("libneton_openssl.so"); into("jni/$abi") }
+    }
+    from(androidEmptyClasses)
+    doFirst {
+        androidManifest.get().asFile.writeText(
+            "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"com.netonstream.openssl\">\n" +
+                "    <uses-sdk android:minSdkVersion=\"26\" />\n</manifest>\n",
+        )
+    }
+    from(androidManifest)
+}
 buildJni.configure { dependsOn(tasks.matching { it.name == "buildOpenSsl" + host.replaceFirstChar { c -> c.uppercase() } }) }
 
 val apiDocsJar = tasks.register<Jar>("apiDocsJar") {

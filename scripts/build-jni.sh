@@ -46,6 +46,20 @@ case "$TARGET" in
             "$SRC" "$PREFIX/lib/libssl.a" "$PREFIX/lib/libcrypto.a" -ldl -lpthread -o "$OUT/libneton_openssl.so"
         rm -f "$MAP"
         ;;
-    *) echo "No JNI library for $TARGET yet (docs/JVM.md: Windows and Android come later)" >&2; exit 1 ;;
+    androidNativeArm64|androidNativeX64)
+        # Android apps (docs/JVM.md): the NDK's clang for API 21, as build-openssl.sh; jni.h comes from the NDK sysroot.
+        : "${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to a pinned Android NDK}"
+        if [[ "$(uname -s)" == Darwin ]]; then NDK_HOST=darwin-x86_64; else NDK_HOST=linux-x86_64; fi
+        NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$NDK_HOST/bin"
+        if [[ "$TARGET" == androidNativeArm64 ]]; then CC="$NDK_BIN/aarch64-linux-android21-clang"; else CC="$NDK_BIN/x86_64-linux-android21-clang"; fi
+        MAP="$OUT/exports.map"
+        printf '{ global: Java_*; local: *; };\n' > "$MAP"
+        "$CC" "${CFLAGS[@]}" -I"$PREFIX/include" -I"$ROOT/openssl/src/nativeInterop/cinterop" \
+            -shared -Wl,--version-script="$MAP" -Wl,--gc-sections -Wl,-z,noexecstack -Wl,--no-undefined -Wl,-z,max-page-size=16384 \
+            "$SRC" "$PREFIX/lib/libssl.a" "$PREFIX/lib/libcrypto.a" -o "$OUT/libneton_openssl.so"
+        "$NDK_BIN/llvm-strip" --strip-unneeded "$OUT/libneton_openssl.so"   # apps ship it: no debug symbols
+        rm -f "$MAP"
+        ;;
+    *) echo "No JNI library for $TARGET yet (docs/JVM.md: Windows comes later)" >&2; exit 1 ;;
 esac
 ls -l "$OUT"
