@@ -36,8 +36,14 @@ written from quic's current use (quic SPEC §4's 12 capabilities) before it is m
 
 ## Packaging
 
-- Desktop: `openssl-jvm` jar with `META-INF/native/<os>-<arch>/libneton_openssl.{so,dylib,dll}` for linux-x64,
-  linux-arm64, macos-arm64, macos-x64, windows-x64; extracted to a per-version directory and loaded once.
+- Desktop: `openssl-jvm` jar with `META-INF/native/<os>-<arch>/libneton_openssl.{so,dylib}` / `neton_openssl.dll` for
+  linux-x64, linux-arm64, macos-arm64, macos-x64, windows-x64; extracted to a per-process directory and loaded once.
+  All five are cross-built on one macOS host (`-PjniPlatforms=all`): Linux with the Kotlin/Native toolchain and
+  sysroots (the native targets' glibc baseline), Windows with MinGW-w64 (UCRT, Windows 10+; only the `Java_*`
+  functions exported). jni_md.h for a platform whose JDK is not the build JDK comes from `src/jvmNative/jni_md/`.
+  **A release publishes with `-PjniPlatforms=all`**; a default build packs the host's library only. CI (`jni` +
+  `jvm-final`) builds the jar that way and runs the JVM tests on all five platforms, on JDK 8 and 21, against the
+  binaries unpacked from that jar (`-PjniPrebuilt`, `-PtestJavaHome`).
 - Android: `lib/<abi>/libneton_openssl.so` for arm64-v8a, armeabi-v7a, x86_64, x86, built with the NDK; packaged as
   an AAR (Android does not load native code from a plain jar's resources). `System.loadLibrary` there.
 - Loading failure is an `UnsatisfiedLinkError` with the platform and the looked-up path, never a silent fallback.

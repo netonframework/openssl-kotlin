@@ -13,6 +13,8 @@ JDK=${JNI_JAVA_HOME:-${JAVA_HOME:?Set JAVA_HOME or JNI_JAVA_HOME for the JNI hea
 SRC="$ROOT/openssl/src/jvmNative/neton_openssl_jni.c"
 INC=(-I"$PREFIX/include" -I"$ROOT/openssl/src/nativeInterop/cinterop" -I"$JDK/include")
 CFLAGS=(-std=c99 -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Wno-deprecated-declarations)
+# jni_md.h for the target OS: the JDK's own when it has that platform's (it is the host's), else src/jvmNative/jni_md.
+jni_md() { if [[ -d "$JDK/include/$1" ]]; then echo "$JDK/include/$1"; else echo "$ROOT/openssl/src/jvmNative/jni_md/$1"; fi; }
 mkdir -p "$OUT"
 case "$TARGET" in
     macosArm64|macosX64)
@@ -41,7 +43,7 @@ case "$TARGET" in
         MAP="$OUT/exports.map"
         printf '{ global: Java_*; local: *; };\n' > "$MAP"
         "$BIN/clang" --target=$TRIPLE --sysroot="$GCC/$TRIPLE/sysroot" --gcc-toolchain="$GCC" -fuse-ld=lld \
-            "${CFLAGS[@]}" "${INC[@]}" -I"$JDK/include/linux" \
+            "${CFLAGS[@]}" "${INC[@]}" -I"$(jni_md linux)" \
             -shared -Wl,--version-script="$MAP" -Wl,--gc-sections -Wl,-z,noexecstack -Wl,--no-undefined \
             "$SRC" "$PREFIX/lib/libssl.a" "$PREFIX/lib/libcrypto.a" -ldl -lpthread -o "$OUT/libneton_openssl.so"
         rm -f "$MAP"
@@ -60,6 +62,17 @@ case "$TARGET" in
         "$NDK_BIN/llvm-strip" --strip-unneeded "$OUT/libneton_openssl.so"   # apps ship it: no debug symbols
         rm -f "$MAP"
         ;;
-    *) echo "No JNI library for $TARGET yet (docs/JVM.md: Windows comes later)" >&2; exit 1 ;;
+    mingwX64)
+        # Windows x64 (docs/JVM.md): cross-built with MinGW-w64 against build-openssl.sh's mingw64 archives. jni.h from
+        # the build JDK, jni_md.h as jni_md() finds it. Only the JNIEXPORT (dllexport) functions are exported; the
+        # GCC runtime is linked in so the DLL needs nothing beyond Windows system libraries.
+        x86_64-w64-mingw32-gcc -std=c99 -O2 -Wall -Wextra -Wno-deprecated-declarations -I"$PREFIX/include" -I"$ROOT/openssl/src/nativeInterop/cinterop" \
+            -I"$JDK/include" -I"$(jni_md win32)" \
+            -shared -static-libgcc -Wl,--gc-sections -Wl,--no-undefined \
+            "$SRC" "$PREFIX/lib/libssl.a" "$PREFIX/lib/libcrypto.a" -lws2_32 -lcrypt32 -luser32 -ladvapi32 -lbcrypt \
+            -o "$OUT/neton_openssl.dll"
+        x86_64-w64-mingw32-strip --strip-unneeded "$OUT/neton_openssl.dll"
+        ;;
+    *) echo "No JNI library for $TARGET" >&2; exit 1 ;;
 esac
 ls -l "$OUT"

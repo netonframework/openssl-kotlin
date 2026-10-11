@@ -6,26 +6,56 @@ plugins {
     signing
 }
 
-val host = when (System.getProperty("os.name")) {
-    "Mac OS X" -> if (System.getProperty("os.arch") == "aarch64") "macosArm64" else "macosX64"
-    "Linux" -> if (System.getProperty("os.arch") == "aarch64") "linuxArm64" else "linuxX64"
-    else -> error("Build on macOS or Linux; Windows cross builds use Linux + MinGW")
+// The host's Kotlin/Native target; null on Windows, where only the JVM target builds (OpenSSL itself is cross-built for
+// mingwX64 on macOS or Linux, and Windows JVM checks use -PjniPrebuilt).
+val host = when {
+    System.getProperty("os.name") == "Mac OS X" -> if (System.getProperty("os.arch") == "aarch64") "macosArm64" else "macosX64"
+    System.getProperty("os.name") == "Linux" -> if (System.getProperty("os.arch") == "aarch64") "linuxArm64" else "linuxX64"
+    System.getProperty("os.name").startsWith("Windows") -> null
+    else -> error("Build on macOS, Linux or (JVM only) Windows")
 }
 val supported = setOf("macosArm64", "macosX64", "linuxX64", "linuxArm64", "iosArm64", "iosSimulatorArm64", "iosX64", "mingwX64", "androidNativeArm64", "androidNativeX64")
-val jniPlatform = mapOf("macosArm64" to "macos-arm64", "macosX64" to "macos-x64", "linuxX64" to "linux-x64", "linuxArm64" to "linux-arm64").getValue(host)
-val jniResources = layout.buildDirectory.dir("jni-resources")
-val buildJni = tasks.register<Exec>("buildJni") {
-    val out = jniResources.map { it.dir("META-INF/native/$jniPlatform") }
+val selected = providers.gradleProperty("nativeTargets").orElse(host ?: "none").get().let {
+    when (it) { "all" -> supported; "none" -> emptySet(); else -> it.split(',').map(String::trim).toSet() }
+}
+require(supported.containsAll(selected)) { "Unknown nativeTargets: $selected" }
+
+// The JVM jar's JNI libraries (docs/JVM.md), META-INF/native/<os>-<arch>/: by default the host's only, built from its
+// OpenSSL archives; -PjniPlatforms=all (or a list of the targets below) cross-builds them all, as a release does, and
+// -PjniPrebuilt=<dir> (relative to openssl/) takes an already assembled META-INF/native tree instead (CI tests the released binaries that way).
+val desktopJni = mapOf("macosArm64" to "macos-arm64", "macosX64" to "macos-x64", "linuxX64" to "linux-x64",
+    "linuxArm64" to "linux-arm64", "mingwX64" to "windows-x64")
+val jniTargets = providers.gradleProperty("jniPlatforms").orNull?.let {
+    if (it == "all") desktopJni.keys else it.split(',').map(String::trim).toSet()
+} ?: setOfNotNull(host)
+require(desktopJni.keys.containsAll(jniTargets)) { "Unknown jniPlatforms: $jniTargets" }
+val jniPrebuilt = providers.gradleProperty("jniPrebuilt").orNull?.let { file(it) }
+fun buildJniTask(target: String, out: Provider<Directory>) = tasks.register<Exec>("buildJni" + target.replaceFirstChar { it.uppercase() }) {
     inputs.files(rootProject.file("scripts/build-jni.sh"), rootProject.file("scripts/build-openssl.sh"), rootProject.file("gradle.properties"))
     inputs.files(fileTree("src/jvmNative"), fileTree("src/nativeInterop/cinterop") { include("*.h") })
-    outputs.dir(jniResources)
+    if (target.startsWith("androidNative")) inputs.property("androidNdkHome", providers.environmentVariable("ANDROID_NDK_HOME").orElse(""))
+    outputs.dir(out)
     environment("JNI_JAVA_HOME", System.getProperty("java.home"))
-    commandLine("bash", rootProject.file("scripts/build-jni.sh"), host, out.get().asFile.absolutePath)
+    commandLine("bash", rootProject.file("scripts/build-jni.sh"), target, out.get().asFile.absolutePath)
+    dependsOn(tasks.matching { it.name == "buildOpenSsl" + target.replaceFirstChar { c -> c.uppercase() } })
 }
-val selected = providers.gradleProperty("nativeTargets").orElse(host).get().let {
-    if (it == "all") supported else it.split(',').map(String::trim).toSet()
+val desktopJniTasks = if (jniPrebuilt != null) emptyMap() else
+    jniTargets.associateWith { buildJniTask(it, layout.buildDirectory.dir("jni/$it")) }
+val assembleJni = tasks.register<Sync>("assembleJni") {
+    into(layout.buildDirectory.dir("jni-resources"))
+    if (jniPrebuilt != null) {
+        from(jniPrebuilt) { include("META-INF/native/**") }
+        doLast {
+            val found = desktopJni.values.filter { File(jniPrebuilt, "META-INF/native/$it").isDirectory }
+            check(found.isNotEmpty()) { "-PjniPrebuilt=$jniPrebuilt has no META-INF/native/<platform>/" }
+        }
+    } else for ((target, buildJni) in desktopJniTasks) {
+        from(buildJni) {
+            include("*.so", "*.dylib", "*.dll")
+            into("META-INF/native/${desktopJni.getValue(target)}")
+        }
+    }
 }
-require(selected.isNotEmpty() && supported.containsAll(selected)) { "Unknown nativeTargets: $selected" }
 
 kotlin {
     // The JVM (docs/JVM.md): JNI over the same static OpenSSL, for desktop JVMs and Android apps. Bytecode 1.8, API 2.2
@@ -84,31 +114,18 @@ kotlin {
     }
     sourceSets {
         commonTest.dependencies { implementation(kotlin("test")) }
-        jvmMain { resources.srcDir(jniResources) }
+        jvmMain { resources.srcDir(assembleJni) }
         matching { it.name.startsWith("native") || it.name.startsWith("macos") || it.name.startsWith("linux") ||
             it.name.startsWith("ios") || it.name.startsWith("mingw") || it.name.startsWith("android") || it.name.startsWith("apple") }
             .configureEach { languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi") }
     }
 }
 
-// The JNI library for this host, packed as META-INF/native/<os>-<arch>/ (NativeLibrary): built from the host's
-// Kotlin/Native OpenSSL archives. The other platforms' libraries are built by CI on their hosts (docs/JVM.md).
-tasks.named("jvmProcessResources") { dependsOn(buildJni) }
-
 // Android apps load native code only from an AAR's jni/<abi>/ (docs/JVM.md): the NDK-built libraries of
 // scripts/build-jni.sh for the Android targets (arm64-v8a; x86_64 needs an NDK whose clang knows OpenSSL 4.0's SM4
 // AVX instructions, 29+), packed with a manifest and an empty classes.jar; the classes are the JVM jar's.
 val androidAbis = mapOf("androidNativeArm64" to "arm64-v8a", "androidNativeX64" to "x86_64")
-val buildJniAndroid = androidAbis.keys.map { target ->
-    tasks.register<Exec>("buildJni" + target.replaceFirstChar { it.uppercase() }) {
-        val out = layout.buildDirectory.dir("jni-android/$target")
-        inputs.files(rootProject.file("scripts/build-jni.sh"), rootProject.file("scripts/build-openssl.sh"), rootProject.file("gradle.properties"))
-        inputs.files(fileTree("src/jvmNative"), fileTree("src/nativeInterop/cinterop") { include("*.h") })
-        outputs.dir(out)
-        environment("JNI_JAVA_HOME", System.getProperty("java.home"))
-        commandLine("bash", rootProject.file("scripts/build-jni.sh"), target, out.get().asFile.absolutePath)
-    }
-}
+androidAbis.keys.forEach { target -> buildJniTask(target, layout.buildDirectory.dir("jni-android/$target")) }
 val androidEmptyClasses = tasks.register<Jar>("androidEmptyClassesJar") {
     archiveFileName.set("classes.jar")
     destinationDirectory.set(layout.buildDirectory.dir("android-aar"))
@@ -132,7 +149,12 @@ tasks.register<Zip>("androidNativesAar") {
     }
     from(androidManifest)
 }
-buildJni.configure { dependsOn(tasks.matching { it.name == "buildOpenSsl" + host.replaceFirstChar { c -> c.uppercase() } }) }
+
+// -PtestJavaHome=<JDK> runs the JVM tests on that JDK instead of Gradle's own, e.g. the oldest one the bytecode targets (8).
+providers.gradleProperty("testJavaHome").orNull?.let { jdk ->
+    val java = if (System.getProperty("os.name").startsWith("Windows")) "bin/java.exe" else "bin/java"
+    tasks.named<Test>("jvmTest") { executable = File(jdk, java).absolutePath }
+}
 
 val apiDocsJar = tasks.register<Jar>("apiDocsJar") {
     archiveClassifier.set("javadoc")

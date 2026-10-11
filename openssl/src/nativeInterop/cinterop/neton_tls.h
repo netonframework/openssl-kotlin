@@ -162,7 +162,8 @@ static inline int neton_tls_sent_close(neton_tls *engine) { return (SSL_get_shut
 static inline int neton_tls_alpn_copy(neton_tls *engine, unsigned char *output) {
     const unsigned char *value = NULL; unsigned int size = 0;
     SSL_get0_alpn_selected(engine->ssl, &value, &size);
-    if (output && size) memcpy(output, value, size); return (int)size;
+    if (output && size) memcpy(output, value, size);
+    return (int)size;
 }
 static inline int neton_tls_export(neton_tls *engine, unsigned char *out, int size,
     const char *label, int label_size, const unsigned char *context, int context_size, int use_context) {
