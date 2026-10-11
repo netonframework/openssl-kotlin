@@ -41,9 +41,16 @@ written from quic's current use (quic SPEC §4's 12 capabilities) before it is m
   All five are cross-built on one macOS host (`-PjniPlatforms=all`): Linux with the Kotlin/Native toolchain and
   sysroots (the native targets' glibc baseline), Windows with MinGW-w64 (UCRT, Windows 10+; only the `Java_*`
   functions exported). jni_md.h for a platform whose JDK is not the build JDK comes from `src/jvmNative/jni_md/`.
-  **A release publishes with `-PjniPlatforms=all`**; a default build packs the host's library only. CI (`jni` +
-  `jvm-final`) builds the jar that way and runs the JVM tests on all five platforms, on JDK 8 and 21, against the
-  binaries unpacked from that jar (`-PjniPrebuilt`, `-PtestJavaHome`).
+  **Release gate:** publishing to any repository but mavenLocal runs `checkReleaseArtifacts`, which refuses a partial
+  set. That means:
+  - every native target (`-PnativeTargets=all`);
+  - the five desktop libraries in the jar (`-PjniPlatforms=all`);
+  - both ABIs in the AAR (NDK 29+).
+
+  Each library's header must name the architecture of its directory. A default build packs only the host's library
+  and can still go to mavenLocal. CI's `release-candidate` job builds and publishes exactly as a release does. Its
+  `consumer` jobs then compile `consumer-jvm` against that Maven directory only: Kotlin 2.1, the library's common
+  tests, no sources. They run on macOS arm64/x64, Linux x64/arm64 and Windows x64, each on JDK 8 and 21.
 - Android: `com.netonstream:openssl-android-natives`, an AAR with `jni/<abi>/libneton_openssl.so` for arm64-v8a
   and x86_64 (NDK 29+, API 21 toolchain, 16 KiB pages, stripped; the 32-bit ABIs are not built), minSdk 24 (the JVM
   stack's floor). Android does not load native code from a plain jar's resources; `System.loadLibrary` there. An app

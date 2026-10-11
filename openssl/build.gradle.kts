@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+import java.util.zip.ZipFile
 
 plugins {
     kotlin("multiplatform")
@@ -154,6 +155,69 @@ tasks.register<Zip>("androidNativesAar") {
     }
     from(androidManifest)
 }
+
+// Release gate: publishing anywhere but mavenLocal (staging, Central bundles, acceptance repositories) needs the
+// complete artifact set, so a forgotten -PnativeTargets=all / -PjniPlatforms=all / NDK cannot ship a partial release.
+// It requires every native target, and opens the built JVM jar and Android AAR to check each expected library: present,
+// and built for the architecture its directory names (ELF e_machine, Mach-O CPU type, PE machine). Development builds
+// (the host only) and mavenLocal are unaffected.
+val desktopLibraries = mapOf(
+    "macos-arm64/libneton_openssl.dylib" to "mach-o arm64", "macos-x64/libneton_openssl.dylib" to "mach-o x86_64",
+    "linux-x64/libneton_openssl.so" to "elf x86_64", "linux-arm64/libneton_openssl.so" to "elf aarch64",
+    "windows-x64/neton_openssl.dll" to "pe x86_64",
+)
+val androidLibraries = mapOf("arm64-v8a/libneton_openssl.so" to "elf aarch64", "x86_64/libneton_openssl.so" to "elf x86_64")
+
+/** "elf aarch64", "mach-o x86_64", "pe x86_64"…, from a shared library's header; "unknown" otherwise. */
+fun nativeArchitecture(bytes: ByteArray): String {
+    fun u16(at: Int) = (bytes[at].toInt() and 0xff) or ((bytes[at + 1].toInt() and 0xff) shl 8)
+    fun u32(at: Int) = u16(at) or (u16(at + 2) shl 16)
+    return when {
+        bytes.size > 20 && bytes[0] == 0x7f.toByte() && bytes[1] == 'E'.code.toByte() -> when (u16(18)) {
+            0xB7 -> "elf aarch64"; 0x3E -> "elf x86_64"; else -> "elf ${u16(18)}"
+        }
+        bytes.size > 8 && u32(0) == 0xfeedfacf.toInt() -> when (u32(4)) {
+            0x0100000c -> "mach-o arm64"; 0x01000007 -> "mach-o x86_64"; else -> "mach-o ${u32(4)}"
+        }
+        bytes.size > 0x40 && bytes[0] == 'M'.code.toByte() && bytes[1] == 'Z'.code.toByte() -> {
+            val pe = u32(0x3c)
+            if (u32(pe) == 0x4550) when (u16(pe + 4)) { 0x8664 -> "pe x86_64"; 0xAA64 -> "pe arm64"; else -> "pe ${u16(pe + 4)}" } else "unknown"
+        }
+        else -> "unknown"
+    }
+}
+
+val checkReleaseArtifacts = tasks.register("checkReleaseArtifacts") {
+    val jvmJar = tasks.named<Jar>("jvmJar").flatMap { it.archiveFile }
+    val androidSkipped = providers.gradleProperty("androidNatives").orNull == "false"
+    val aar = tasks.named<Zip>("androidNativesAar").flatMap { it.archiveFile }
+    inputs.files(jvmJar)
+    if (!androidSkipped) inputs.files(aar)
+    val nativeMissing = supported - selected
+    doLast {
+        val problems = mutableListOf<String>()
+        if (nativeMissing.isNotEmpty()) problems += "native targets missing (-PnativeTargets=all): ${nativeMissing.sorted()}"
+        if (androidSkipped) problems += "-PandroidNatives=false: the release needs openssl-android-natives"
+        fun check(archive: File, prefix: String, expected: Map<String, String>) {
+            ZipFile(archive).use { zip ->
+                for ((path, arch) in expected) {
+                    val entry = zip.getEntry(prefix + path)
+                    if (entry == null) { problems += "${archive.name}: no $prefix$path"; continue }
+                    val head = zip.getInputStream(entry).use { it.readNBytes(4096) }
+                    val found = nativeArchitecture(head)
+                    if (found != arch) problems += "${archive.name}: $prefix$path is $found, not $arch"
+                }
+            }
+        }
+        check(jvmJar.get().asFile, "META-INF/native/", desktopLibraries)
+        if (!androidSkipped) check(aar.get().asFile, "jni/", androidLibraries)
+        check(problems.isEmpty()) {
+            "Release artifacts incomplete (docs/JVM.md; publish with -PnativeTargets=all -PjniPlatforms=all and " +
+                "ANDROID_NDK_HOME set to NDK 29+):\n  " + problems.joinToString("\n  ")
+        }
+    }
+}
+tasks.withType<PublishToMavenRepository>().configureEach { dependsOn(checkReleaseArtifacts) }
 
 // -PtestJavaHome=<JDK> runs the JVM tests on that JDK instead of Gradle's own, e.g. the oldest one the bytecode targets (8).
 providers.gradleProperty("testJavaHome").orNull?.let { jdk ->

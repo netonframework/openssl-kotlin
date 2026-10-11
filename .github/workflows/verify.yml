@@ -56,41 +56,38 @@ jobs:
         with:
           name: linux-test-reports
           path: openssl/build/test-results/
-  # The JVM jar as it is released: one macOS job cross-builds the JNI library for every desktop platform from the
-  # same pinned OpenSSL (Linux with the Kotlin/Native toolchain and sysroots, Windows with MinGW-w64) and assembles
-  # META-INF/native/; the jvm-final jobs then run the JVM tests on each platform against exactly those binaries.
-  jni:
+  # A release candidate, built the way a release is: every native target, every desktop JNI library cross-built on this
+  # macOS host (Linux with the Kotlin/Native toolchain and sysroots, Windows with MinGW-w64), the Android AAR with NDK 29,
+  # all through the release gate (checkReleaseArtifacts), published to a plain Maven directory. The jobs after it test
+  # that directory only, never the sources.
+  release-candidate:
     runs-on: macos-14
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Cross toolchains (MinGW-w64; Kotlin/Native Linux sysroots)
+      - name: Cross toolchains (MinGW-w64, NDK 29, Kotlin/Native Linux sysroots)
         run: |
           brew install mingw-w64
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
           ./gradlew :openssl:downloadKotlinNativeDistribution --console=plain
           KONANC="$HOME/.konan/kotlin-native-prebuilt-macos-aarch64-2.4.20/bin/konanc"
           "$KONANC" scripts/bootstrap.kt -target linux_x64 -produce library -o build/bootstrap-x64
           "$KONANC" scripts/bootstrap.kt -target linux_arm64 -produce library -o build/bootstrap-arm64
-      - name: Build the JVM jar with every desktop JNI library
-        run: ./gradlew -PnativeTargets=none -PjniPlatforms=all :openssl:jvmJar --console=plain
-      - name: Check the jar's native libraries
-        run: |
-          JAR=$(ls openssl/build/libs/openssl-jvm-*.jar | grep -v sources)
-          unzip -l "$JAR" | grep META-INF/native/
-          for lib in macos-arm64/libneton_openssl.dylib macos-x64/libneton_openssl.dylib linux-x64/libneton_openssl.so \
-              linux-arm64/libneton_openssl.so windows-x64/neton_openssl.dll; do
-            unzip -l "$JAR" "META-INF/native/$lib" > /dev/null || { echo "missing $lib"; exit 1; }
-          done
-          cp "$JAR" openssl-jvm.jar
+      - name: Publish the candidate (release gate included)
+        run: ./gradlew -PnativeTargets=all -PjniPlatforms=all -Pversion=4.0.2-ci :openssl:publishAllPublicationsToStagingRepository --console=plain
       - uses: actions/upload-artifact@v4
         with:
-          name: openssl-jvm-jar
-          path: openssl-jvm.jar
-  jvm-final:
-    needs: jni
+          name: openssl-release-candidate
+          path: build/staging-repo/
+  consumer:
+    # The candidate as a downstream JVM project gets it (consumer-jvm: Kotlin 2.1, the library's common tests against
+    # the published jar, its JNI library extracted from the jar) on every desktop platform, on JDK 8 and 21.
+    needs: release-candidate
     strategy:
       fail-fast: false
       matrix:
@@ -113,14 +110,14 @@ jobs:
           java-version: '17'
       - uses: actions/download-artifact@v4
         with:
-          name: openssl-jvm-jar
-      - name: JVM tests on JDK ${{ matrix.jdk }} against the jar's JNI libraries
+          name: openssl-release-candidate
+          path: candidate-repo
+      - name: Common tests on JDK ${{ matrix.jdk }} against the candidate
         run: |
-          mkdir jni-final && (cd jni-final && unzip -q ../openssl-jvm.jar 'META-INF/native/*')
-          ./gradlew -PnativeTargets=none -PjniPrebuilt=../jni-final -PtestJavaHome="${{ steps.test-jdk.outputs.path }}" \
-            :openssl:jvmTest --console=plain
+          ./gradlew -p consumer-jvm -PstagedRepository=../candidate-repo -PopensslVersion=4.0.2-ci \
+            -PtestJavaHome="${{ steps.test-jdk.outputs.path }}" test --console=plain
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: jvm-final-${{ matrix.os }}-jdk${{ matrix.jdk }}
-          path: openssl/build/test-results/
+          name: consumer-${{ matrix.os }}-jdk${{ matrix.jdk }}
+          path: consumer-jvm/build/test-results/
