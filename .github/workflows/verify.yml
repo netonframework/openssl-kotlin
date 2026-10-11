@@ -22,7 +22,7 @@ jobs:
           ./gradlew -PnativeTargets=$TARGET :openssl:jvmTest --console=plain
       - name: Validate external Maven consumer
         run: |
-          ./gradlew :openssl:publishToMavenLocal --console=plain
+          ./gradlew :openssl:publishToMavenLocal -PandroidNatives=false --console=plain
           if [ "$(uname -m)" = arm64 ]; then TARGET=MacosArm64; else TARGET=MacosX64; fi
           ./gradlew -p smoke runReleaseExecutable$TARGET --console=plain
       - uses: actions/upload-artifact@v4
@@ -49,7 +49,7 @@ jobs:
         run: ./gradlew -PnativeTargets=linuxX64 :openssl:jvmTest --console=plain
       - name: Validate external Maven consumer
         run: |
-          ./gradlew -PnativeTargets=linuxX64 :openssl:publishToMavenLocal --console=plain
+          ./gradlew -PnativeTargets=linuxX64 :openssl:publishToMavenLocal -PandroidNatives=false --console=plain
           ./gradlew -p smoke runReleaseExecutableLinuxX64 --console=plain
       - uses: actions/upload-artifact@v4
         if: always()

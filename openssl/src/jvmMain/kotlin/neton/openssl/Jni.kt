@@ -155,19 +155,14 @@ internal object NativeLibrary {
         val resource = "/META-INF/native/$platform/$name"
         val input = NativeLibrary::class.java.getResourceAsStream(resource)
             ?: throw UnsatisfiedLinkError("libneton_openssl: no $resource in the classpath for $platform")
-        val dir = File(System.getProperty("java.io.tmpdir"), "neton-openssl-${ProcessHandleCompat.id()}")
-        dir.mkdirs()
+        // A fresh directory per load (createTempFile reserves a unique name; java.lang.management, for a pid, is
+        // missing on Android, and java.nio.file needs API 26). deleteOnExit runs in reverse order: the file first.
+        val dir = File.createTempFile("neton-openssl-", "")
+        check(dir.delete() && dir.mkdir()) { "libneton_openssl: cannot create $dir" }
+        dir.deleteOnExit()
         val file = File(dir, name)
+        file.deleteOnExit()
         input.use { src -> FileOutputStream(file).use { dst -> src.copyTo(dst) } }
-        file.deleteOnExit(); dir.deleteOnExit()
         return file
-    }
-}
-
-/** A per-process name for the extraction directory (bytecode 1.8: no ProcessHandle). */
-private object ProcessHandleCompat {
-    fun id(): String {
-        val name = java.lang.management.ManagementFactory.getRuntimeMXBean().name   // "pid@host"
-        return name.substringBefore('@').ifEmpty { System.nanoTime().toString() } + "-" + System.nanoTime()
     }
 }

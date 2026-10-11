@@ -121,9 +121,11 @@ kotlin {
     }
 }
 
-// Android apps load native code only from an AAR's jni/<abi>/ (docs/JVM.md): the NDK-built libraries of
-// scripts/build-jni.sh for the Android targets (arm64-v8a; x86_64 needs an NDK whose clang knows OpenSSL 4.0's SM4
-// AVX instructions, 29+), packed with a manifest and an empty classes.jar; the classes are the JVM jar's.
+// Android apps load native code only from an AAR's jni/<abi>/ (docs/JVM.md), so the NDK-built libraries of
+// scripts/build-jni.sh ship as their own artifact, com.netonstream:openssl-android-natives (an AAR: the libraries, a
+// manifest and an empty classes.jar; the classes are the JVM jar's). arm64-v8a and x86_64; NDK 29+ (older clang cannot
+// assemble OpenSSL 4.0's SM4 AVX code for x86_64). minSdk 24: the JVM stack's floor (java.nio socket options and
+// DatagramChannel binding), checked from the bytecode by msgtrans-kotlin's interop/android-min-api.py.
 val androidAbis = mapOf("androidNativeArm64" to "arm64-v8a", "androidNativeX64" to "x86_64")
 androidAbis.keys.forEach { target -> buildJniTask(target, layout.buildDirectory.dir("jni-android/$target")) }
 val androidEmptyClasses = tasks.register<Jar>("androidEmptyClassesJar") {
@@ -132,7 +134,7 @@ val androidEmptyClasses = tasks.register<Jar>("androidEmptyClassesJar") {
 }
 val androidManifest = layout.buildDirectory.file("android-aar/AndroidManifest.xml")
 tasks.register<Zip>("androidNativesAar") {
-    val abis = providers.gradleProperty("androidAbis").orElse("arm64-v8a").get().split(',')
+    val abis = providers.gradleProperty("androidAbis").orElse("arm64-v8a,x86_64").get().split(',')
     archiveBaseName.set("openssl-android-natives")
     archiveExtension.set("aar")
     destinationDirectory.set(layout.buildDirectory.dir("android-aar"))
@@ -141,10 +143,13 @@ tasks.register<Zip>("androidNativesAar") {
         from(layout.buildDirectory.dir("jni-android/$target")) { include("libneton_openssl.so"); into("jni/$abi") }
     }
     from(androidEmptyClasses)
+    // Licences at the AAR's root: in classes.jar they would collide with the JVM jar's in the app's Java resources.
+    from(rootProject.file("LICENSE"), rootProject.file("NOTICE"))
+    from(rootProject.file("licenses/OpenSSL.txt")) { into("licenses") }
     doFirst {
         androidManifest.get().asFile.writeText(
             "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"com.netonstream.openssl\">\n" +
-                "    <uses-sdk android:minSdkVersion=\"26\" />\n</manifest>\n",
+                "    <uses-sdk android:minSdkVersion=\"24\" />\n</manifest>\n",
         )
     }
     from(androidManifest)
@@ -161,7 +166,20 @@ val apiDocsJar = tasks.register<Jar>("apiDocsJar") {
     from(rootProject.file("README.md"))
     from(rootProject.file("docs/SAFE_API.md"))
 }
+val androidSourcesJar = tasks.register<Jar>("androidSourcesJar") {
+    archiveBaseName.set("openssl-android-natives")
+    archiveClassifier.set("sources")
+    from(rootProject.file("docs/JVM.md"))
+}
+
 publishing {
+    // -PandroidNatives=false leaves the AAR out (it needs ANDROID_NDK_HOME); a release always includes it.
+    if (providers.gradleProperty("androidNatives").orNull != "false") publications.create<MavenPublication>("androidNatives") {
+        artifactId = "openssl-android-natives"
+        artifact(tasks.named("androidNativesAar"))
+        artifact(androidSourcesJar)
+        pom { packaging = "aar" }
+    }
     repositories { maven { name = "staging"; url = rootProject.layout.buildDirectory.dir("staging-repo").get().asFile.toURI() } }
     publications.withType<MavenPublication>().configureEach {
         artifact(apiDocsJar)
@@ -176,7 +194,7 @@ publishing {
     }
 }
 val key = providers.environmentVariable("SIGNING_KEY").orElse(providers.gradleProperty("signingInMemoryKey"))
-tasks.withType<Jar>().configureEach {
+tasks.withType<Jar>().matching { it.name != "androidEmptyClassesJar" }.configureEach {
     from(rootProject.file("LICENSE")) { into("META-INF") }
     from(rootProject.file("NOTICE")) { into("META-INF") }
     from(rootProject.file("licenses/OpenSSL.txt")) { into("META-INF/licenses") }

@@ -44,8 +44,13 @@ written from quic's current use (quic SPEC §4's 12 capabilities) before it is m
   **A release publishes with `-PjniPlatforms=all`**; a default build packs the host's library only. CI (`jni` +
   `jvm-final`) builds the jar that way and runs the JVM tests on all five platforms, on JDK 8 and 21, against the
   binaries unpacked from that jar (`-PjniPrebuilt`, `-PtestJavaHome`).
-- Android: `lib/<abi>/libneton_openssl.so` for arm64-v8a, armeabi-v7a, x86_64, x86, built with the NDK; packaged as
-  an AAR (Android does not load native code from a plain jar's resources). `System.loadLibrary` there.
+- Android: `com.netonstream:openssl-android-natives`, an AAR with `jni/<abi>/libneton_openssl.so` for arm64-v8a
+  and x86_64 (NDK 29+, API 21 toolchain, 16 KiB pages, stripped; the 32-bit ABIs are not built), minSdk 24 (the JVM
+  stack's floor). Android does not load native code from a plain jar's resources; `System.loadLibrary` there. An app
+  adds it next to the libraries, filters to those ABIs and excludes `META-INF/native/**` (the desktop libraries in
+  the JVM jar). The JVM jar ships its R8 keep rule in `META-INF/proguard/` (the JNI class and native methods keep
+  their names; C never calls back into Java). Checked by msgtrans-kotlin's `interop/android-app-smoke.sh`: a Kotlin
+  2.1 app, R8 release, on Android 16 and Android 7.0 (API 24) arm64 emulators.
 - Loading failure is an `UnsatisfiedLinkError` with the platform and the looked-up path, never a silent fallback.
 
 ## Phases and gates
