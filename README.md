@@ -155,6 +155,21 @@ packages only the configured release version. `upload` submits for validation wi
 Portal credentials come from `MAVEN_CENTRAL_USERNAME` / `MAVEN_CENTRAL_PASSWORD` or Gradle user
 properties `mavenCentralUsername` / `mavenCentralPassword`. Never commit credentials or signatures' private keys.
 
+## Concurrent Local Builds
+
+OpenSSL and JNI builds share a kernel-managed lock per target, including across independent Gradle composite builds.
+The lock is released when the owning processes exit; do not delete `build.lock` while builds are running.
+Before rebuilding, the script checks the source checksum, build-script hash, compiler version, configuration flags,
+and required installed files. Identical builds reuse the installation; failed builds never receive a success stamp.
+JNI libraries are linked to temporary files and renamed into place only after linking succeeds.
+
+Use separate checkouts for concurrent builds with different toolchains or configuration flags: downstream native
+compilers read installed headers and archives outside the producer lock. Cache reuse is not an artifact integrity
+audit; source archives are checksum-verified, while installed output checks detect missing or empty required files.
+
+`scripts/test-build-lock.sh` and `scripts/test-build-cache.sh` exercise process exclusion, cache invalidation and
+failed-build recovery without compiling OpenSSL. CI runs both on macOS and Linux.
+
 ## Provenance
 
 The packaging approach was informed by ensody/native-builds. Build scripts and Kotlin code here

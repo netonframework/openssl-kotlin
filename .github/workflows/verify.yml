@@ -8,6 +8,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/test-build-guards.sh
+      - run: bash scripts/test-build-lock.sh
+      - run: bash scripts/test-build-cache.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -35,6 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/test-build-guards.sh
+      - run: bash scripts/test-build-lock.sh
+      - run: bash scripts/test-build-cache.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -7,15 +7,28 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TARGET=${1:?Usage: build-jni.sh <target> <output directory>}
 OUT=${2:?Usage: build-jni.sh <target> <output directory>}
+case "$TARGET" in
+    macosArm64|macosX64|linuxX64|linuxArm64|mingwX64|androidNativeArm64|androidNativeX64) ;;
+    *) echo "No JNI library for $TARGET" >&2; exit 1 ;;
+esac
+BASE="$ROOT/build/openssl/$TARGET"
+mkdir -p "$BASE"
+if [[ "${NETON_OPENSSL_LOCK:-}" != "$BASE" ]]; then
+    exec perl "$ROOT/scripts/with-build-lock.pl" "$BASE/build.lock" \
+        env NETON_OPENSSL_LOCK="$BASE" bash "$0" "$@"
+fi
 PREFIX="$ROOT/build/openssl/$TARGET/install"
 JDK=${JNI_JAVA_HOME:-${JAVA_HOME:?Set JAVA_HOME or JNI_JAVA_HOME for the JNI headers}}
-[[ -f "$PREFIX/lib/libcrypto.a" && -f "$PREFIX/lib/libssl.a" ]] || bash "$ROOT/scripts/build-openssl.sh" "$TARGET"
+bash "$ROOT/scripts/build-openssl.sh" "$TARGET"
 SRC="$ROOT/openssl/src/jvmNative/neton_openssl_jni.c"
 INC=(-I"$PREFIX/include" -I"$ROOT/openssl/src/nativeInterop/cinterop" -I"$JDK/include")
 CFLAGS=(-std=c99 -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Wno-deprecated-declarations)
 # jni_md.h for the target OS: the JDK's own when it has that platform's (it is the host's), else src/jvmNative/jni_md.
 jni_md() { if [[ -d "$JDK/include/$1" ]]; then echo "$JDK/include/$1"; else echo "$ROOT/openssl/src/jvmNative/jni_md/$1"; fi; }
 mkdir -p "$OUT"
+DEST="$OUT"
+OUT=$(mktemp -d "$DEST/.jni.XXXXXX")
+trap 'rm -rf "$OUT"' EXIT
 case "$TARGET" in
     macosArm64|macosX64)
         [[ "$TARGET" == macosArm64 ]] && ARCH=arm64 || ARCH=x86_64
@@ -75,4 +88,8 @@ case "$TARGET" in
         ;;
     *) echo "No JNI library for $TARGET" >&2; exit 1 ;;
 esac
-ls -l "$OUT"
+for library in "$OUT"/*.so "$OUT"/*.dylib "$OUT"/*.dll; do
+    [[ -f "$library" ]] || continue
+    mv -f "$library" "$DEST/"
+done
+ls -l "$DEST"

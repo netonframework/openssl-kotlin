@@ -5,6 +5,7 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/scripts" "$TMP/build/downloads"
 cp "$ROOT/scripts/build-openssl.sh" "$TMP/scripts/"
+cp "$ROOT/scripts/with-build-lock.pl" "$TMP/scripts/"
 
 # Deliberately invalid fixtures must fail before any download, extraction or compilation.
 printf 'opensslVersion=3.5.8\nopensslSha256=invalid\n' > "$TMP/gradle.properties"

@@ -2,10 +2,19 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TARGET=${1:?Usage: build-openssl.sh <Kotlin Native target>}
+case "$TARGET" in
+    macosArm64|macosX64|iosArm64|iosSimulatorArm64|iosX64|linuxX64|linuxArm64|mingwX64|androidNativeArm64|androidNativeX64) ;;
+    *) echo "Unsupported target: $TARGET" >&2; exit 1 ;;
+esac
+BASE="$ROOT/build/openssl/$TARGET"
+mkdir -p "$BASE"
+if [[ "${NETON_OPENSSL_LOCK:-}" != "$BASE" ]]; then
+    exec perl "$ROOT/scripts/with-build-lock.pl" "$BASE/build.lock" \
+        env NETON_OPENSSL_LOCK="$BASE" bash "$0" "$@"
+fi
 VERSION=$(sed -n 's/^opensslVersion=//p' "$ROOT/gradle.properties")
 SHA=$(sed -n 's/^opensslSha256=//p' "$ROOT/gradle.properties")
 [[ "$VERSION" =~ ^4\.[0-9]+\.[0-9]+$ ]] || { echo "Only stable OpenSSL 4.x releases are supported" >&2; exit 1; }
-BASE="$ROOT/build/openssl/$TARGET"
 PREFIX="$BASE/install"
 SOURCE="$BASE/source"
 ARCHIVE="$ROOT/build/downloads/openssl-$VERSION.tar.gz"
@@ -80,6 +89,32 @@ case "$TARGET" in
     *) echo "Unsupported target: $TARGET" >&2; exit 1 ;;
 esac
 
+# Gradle composite builds do not share task history. Recheck under the process lock before replacing any files.
+if [[ "$TARGET" == androidNative* ]]; then
+    COMPILER=(clang)
+else
+    read -r -a COMPILER <<< "${CC:-x86_64-w64-mingw32-gcc}"
+fi
+COMPILER_VERSION=$("${COMPILER[@]}" --version)
+FINGERPRINT=$({
+    digest "$0" | awk '{print $1}'
+    printf '%s\0' "$VERSION" "$SHA" "$TARGET" "$CONFIG" "${FLAGS[@]}" \
+        "${CC:-}" "${AR:-}" "${RANLIB:-}" "${CFLAGS:-}" "${CPPFLAGS:-}" "${LDFLAGS:-}" \
+        "${CROSS_TOP:-}" "${CROSS_SDK:-}" "${ANDROID_NDK_HOME:-}"
+    printf '%s\n' "$COMPILER_VERSION"
+    if [[ "$TARGET" == androidNative* ]]; then digest "$ANDROID_NDK_HOME/source.properties"; fi
+} | digest /dev/stdin | awk '{print $1}')
+STAMP="$PREFIX/.build-fingerprint"
+if [[ -f "$STAMP" && "$(< "$STAMP")" == "$FINGERPRINT" &&
+      -s "$PREFIX/lib/libssl.a" && -s "$PREFIX/lib/libcrypto.a" &&
+      -s "$PREFIX/include/openssl/ssl.h" && -s "$PREFIX/include/openssl/configuration.h" &&
+      -s "$PREFIX/build-info.txt" && -s "$PREFIX/LICENSE-OpenSSL.txt" ]]; then
+    if [[ "$TARGET" != androidNative* || -s "$PREFIX/lib/libopenssl.a" ]]; then
+        echo "Reusing OpenSSL $VERSION for $TARGET"
+        exit 0
+    fi
+fi
+
 # Each target gets its own source/build tree; no cross-target generated-header races.
 rm -rf "$SOURCE" "$PREFIX"
 mkdir -p "$SOURCE"
@@ -102,3 +137,4 @@ EOF
 fi
 cp LICENSE.txt "$PREFIX/LICENSE-OpenSSL.txt"
 printf 'OpenSSL=%s\nsha256=%s\ntarget=%s\nconfiguration=%s\n' "$VERSION" "$SHA" "$TARGET" "$CONFIG" > "$PREFIX/build-info.txt"
+printf '%s\n' "$FINGERPRINT" > "$STAMP"
