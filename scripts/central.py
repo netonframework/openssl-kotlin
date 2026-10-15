@@ -32,12 +32,14 @@ def bundle():
     version = properties(ROOT / 'gradle.properties')['version']
     staging = ROOT / 'build/staging-repo'
     files = sorted(p for p in staging.glob(f'com/netonstream/*/{version}/*')
-                   if p.suffix in ('.pom', '.module', '.jar', '.klib'))
+                   if p.suffix in ('.pom', '.module', '.jar', '.klib', '.aar', '.json'))
     coordinates = {p.parent.parent.name for p in files}
     targets = ('macosarm64', 'macosx64', 'linuxx64', 'linuxarm64',
                'iosarm64', 'iossimulatorarm64', 'iosx64', 'mingwx64',
                'androidnativearm64', 'androidnativex64')
-    assert coordinates == {'openssl'} | {f'openssl-{t}' for t in targets}, coordinates
+    # Native klibs per target, the JVM jar (desktop JNI libraries inside) and the Android AAR (NDK JNI libraries).
+    expected = {'openssl', 'openssl-jvm', 'openssl-android-natives'} | {f'openssl-{t}' for t in targets}
+    assert coordinates == expected, sorted(coordinates ^ expected)
     output = ROOT / f'build/central-{version}.zip'
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in files:

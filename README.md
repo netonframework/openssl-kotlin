@@ -149,7 +149,8 @@ complete multiplatform release. `publishAllPublicationsToStagingRepository` stag
 this task does not auto-upload to Central. Signing uses `SIGNING_KEY` / `SIGNING_PASSWORD`
 or Gradle user properties `signingInMemoryKey` / `signingInMemoryKeyPassword`.
 
-`python3 scripts/central.py bundle` checks that all eleven coordinates have signatures and
+`python3 scripts/central.py bundle` checks that all thirteen coordinates (ten native targets, the root
+metadata, `openssl-jvm` and `openssl-android-natives`) have signatures and
 packages only the configured release version. `upload` submits for validation without publishing;
 `status --id ID` inspects the deployment; `publish --id ID` explicitly releases a validated bundle.
 Portal credentials come from `MAVEN_CENTRAL_USERNAME` / `MAVEN_CENTRAL_PASSWORD` or Gradle user
