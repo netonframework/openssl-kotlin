@@ -6,7 +6,10 @@ import kotlin.test.*
 class OpenSslRuntimeTest {
     private fun ByteArray.hex() = joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') }
 
-    @Test fun linkedVersionMatchesHeaders() { OpenSsl.checkVersion(); assertTrue(OpenSsl.version.startsWith("OpenSSL 4.")) }
+    @Test fun linkedVersionMatchesHeaders() {
+        OpenSsl.checkVersion()
+        assertTrue(OpenSsl.version.startsWith("OpenSSL 4.1.0 "), "Unexpected linked OpenSSL: ${OpenSsl.version}")
+    }
     @Test fun sha256KnownVectors() {
         assertEquals("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", OpenSsl.sha256(byteArrayOf()).hex())
         assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", OpenSsl.sha256("abc".encodeToByteArray()).hex())

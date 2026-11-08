@@ -1,7 +1,7 @@
 OpenSSL Kotlin
 Copyright 2026 Neton contributors
 
-This product bundles OpenSSL 4.0.2, developed by The OpenSSL Project Authors.
+This product bundles OpenSSL 4.1.0, developed by The OpenSSL Project Authors.
 Upstream: https://github.com/openssl/openssl
 Upstream license: licenses/OpenSSL.txt
 

@@ -83,7 +83,7 @@ jobs:
           "$KONANC" scripts/bootstrap.kt -target linux_x64 -produce library -o build/bootstrap-x64
           "$KONANC" scripts/bootstrap.kt -target linux_arm64 -produce library -o build/bootstrap-arm64
       - name: Publish the candidate (release gate included)
-        run: ./gradlew -PnativeTargets=all -PjniPlatforms=all -Pversion=4.0.2-ci :openssl:publishAllPublicationsToStagingRepository --console=plain
+        run: ./gradlew -PnativeTargets=all -PjniPlatforms=all -Pversion=4.1.0-ci :openssl:publishAllPublicationsToStagingRepository --console=plain
       - uses: actions/upload-artifact@v4
         with:
           name: openssl-release-candidate
@@ -118,7 +118,7 @@ jobs:
           path: candidate-repo
       - name: Common tests on JDK ${{ matrix.jdk }} against the candidate
         run: |
-          ./gradlew -p consumer-jvm -PstagedRepository=../candidate-repo -PopensslVersion=4.0.2-ci \
+          ./gradlew -p consumer-jvm -PstagedRepository=../candidate-repo -PopensslVersion=4.1.0-ci \
             -PtestJavaHome="${{ steps.test-jdk.outputs.path }}" test --console=plain
       - uses: actions/upload-artifact@v4
         if: always()

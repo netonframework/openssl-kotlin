@@ -1,5 +1,20 @@
 # Validation
 
+## 4.1.0 release candidate
+
+Upstream OpenSSL 4.1.0 was released on 2026-10-23. The candidate pins its official
+source SHA-256 in gradle.properties. This is an upstream-library upgrade, not a
+wrapper-only renumbering. Native, JNI, Android packaging and downstream TLS/QUIC
+acceptance are pending; no 4.1.0 Maven publication or compatibility approval is
+claimed yet. Existing 4.0.2-3 consumers and ongoing soak tests remain pinned.
+
+2026-11-09 local candidate checks: macOS ARM64 Native 38/38 and JVM 27/27 passed,
+with zero failures or skips. The common runtime test requires actual OpenSSL
+4.1.0, not just a matching major version. Build guard, lock and cache tests also
+passed. This does not certify the other platform binaries or downstream stacks.
+
+## Historical 4.0.2 validation
+
 Publication status: **4.0.2 validated; publication requested, awaiting Central propagation**.
 
 Deployment: `bc87dde3-2eb9-4dc5-878f-4c0ed3a7cb3e` (2026-09-28).

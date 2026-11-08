@@ -1,6 +1,6 @@
 # JVM support (plan, 2026-10-11)
 
-Goal: the same OpenSSL 4.0.2 on the JVM (desktop and Android apps), so that `com.netonstream:quic`, and through it
+Goal: the same pinned OpenSSL on the JVM (desktop and Android apps), so that `com.netonstream:quic`, and through it
 `msgtrans-quic`, run on the JVM with real TLS 1.3, not a second TLS implementation. Kotlin/Native keeps its cinterop
 binding unchanged.
 

@@ -10,5 +10,7 @@ kotlin {
         else -> error("Unsupported smoke-test host")
     }
     target.binaries.executable { entryPoint = "main" }
-    sourceSets.commonMain.dependencies { implementation("com.netonstream:openssl:4.0.2-3") }
+    sourceSets.commonMain.dependencies {
+        implementation("com.netonstream:openssl:${providers.gradleProperty("opensslVersion").getOrElse("4.1.0")}")
+    }
 }
