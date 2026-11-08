@@ -4,7 +4,9 @@ permissions:
   contents: read
 jobs:
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/test-build-guards.sh
@@ -65,7 +67,9 @@ jobs:
   # all through the release gate (checkReleaseArtifacts), published to a plain Maven directory. The jobs after it test
   # that directory only, never the sources.
   release-candidate:
-    runs-on: macos-14
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -95,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm, windows-latest]
+        os: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm, windows-latest]
         jdk: ['8', '21']
     runs-on: ${{ matrix.os }}
     defaults:
