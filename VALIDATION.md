@@ -1,6 +1,14 @@
 # Validation
 
-## 4.1.0-1 candidate: Windows Native repair
+## 4.1.0-1 release validation (2026-11-09)
+
+Published from `f8b0e43a146aca31c9c64691deb02aa905ebfd28`, tag `v4.1.0-1`.
+Central deployment `65e8be8b-76e7-48ef-a450-c3c9b3a1aff0` is `PUBLISHED`.
+All 80 payloads and 80 production signatures across 13 coordinates were downloaded
+from Central and matched the verified staging artifacts. Central-only JVM tests
+and the macOS ARM64 Native consumer passed. Detailed local evidence is retained in
+`build/openssl-4.1.0-1-public-verification.json`,
+`build/openssl-4101-public-consumer.log` and `build/openssl-4101-public-native.log`.
 
 Downstream TLS Native linking on Windows exposed an unresolved `stat64i32` symbol
 in 4.1.0's file-store provider. JVM/JNI consumers passed because their DLL links with
@@ -14,8 +22,19 @@ tracked source patch is included in the build-cache fingerprint. Public Kotlin/J
 APIs and the upstream source archive checksum remain unchanged.
 
 The release matrix now links the full Native Windows tests and separately compiles
-and executes the common public-API tests from the staged KLIB on Windows. Candidate
-validation and publication remain pending.
+and executes the common public-API tests from the staged KLIB on Windows.
+[Release CI](https://github.com/netonframework/openssl-kotlin/actions/runs/42523992984)
+passed all 14 jobs, including this Windows Native consumer and all ten desktop
+JVM consumers on JDK 8/21. Local build guard, lock and cache tests also passed.
+
+Downstream candidate TLS, TLS-HTTP, TLS-WebSocket, QUIC, HTTP3 and Neton host tests
+passed against the actual staged artifacts; Neton's 14-module ABI gate passed
+without changing its API inventories. The Kotlin 2.1 artifact-only QUIC,
+msgtrans-QUIC, WS and WSS consumers passed with strict dependency-version checks.
+An R8 release app on Android 16 ARM64 reported OpenSSL 4.1.0 and passed QUIC, WS
+and WSS. These are candidate compatibility results, not certification of pending
+downstream Maven releases or the unrelated ongoing 24-hour HTTP soak. iOS and
+Android Kotlin/Native targets remain cross-build coverage, not device execution.
 
 ## 4.1.0 release validation (2026-11-09)
 

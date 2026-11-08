@@ -1,9 +1,9 @@
 # OpenSSL Kotlin
 
 OpenSSL **4.1.0** static libraries and Kotlin/Native bindings for the Neton protocol stack.
-Published coordinate: `com.netonstream:openssl:4.1.0` (the version follows upstream OpenSSL).
+Published coordinate: `com.netonstream:openssl:4.1.0-1` (OpenSSL 4.1.0 with a wrapper build repair).
 See [VALIDATION.md](VALIDATION.md) for platform coverage and downstream compatibility results.
-Windows Kotlin/Native consumers must wait for the `4.1.0-1` repair: the published `4.1.0`
+Windows Kotlin/Native consumers must use the `4.1.0-1` repair: the published `4.1.0`
 static archive has a MinGW CRT link incompatibility. JVM/JNI is unaffected by that link error.
 Kotlin compiler: **2.4.20** (no lower version is accepted by the build). Minimum supported OpenSSL line: **4.0.x**, no 3.x compatibility.
 
@@ -70,7 +70,7 @@ certificate store behavior, network interoperability, QUIC correctness or perfor
 ## Use
 
 ```kotlin
-implementation("com.netonstream:openssl:4.1.0")
+implementation("com.netonstream:openssl:4.1.0-1")
 ```
 
 ```kotlin
@@ -143,7 +143,8 @@ publication version in `gradle.properties`, refreshes the upstream license, and 
 as `4.0.2`; the only difference is the build timestamp in `libcrypto-lib-cversion.o`. It sorts below
 `4.0.2`, so a graph that holds both resolves to `4.0.2`, which is harmless. `com.netonstream:tls:0.1.0`
 depends on it; later tls releases depend on `4.0.2`.
-4.1.0 is published with the existing public facade unchanged and staged TLS/QUIC compatibility tests passed.
+4.1.0-1 is published with the existing public facade unchanged and the Windows Native CRT repair.
+Its release matrix includes Native Windows execution and ten desktop JVM consumer jobs.
 Neton 1.1.1 and existing protocol releases remain pinned to 4.0.2-3; upgrading their published dependency
 baseline requires a separate release. Do not auto-follow branches.
 
