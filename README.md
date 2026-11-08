@@ -1,8 +1,8 @@
 # OpenSSL Kotlin
 
-OpenSSL **4.1.0 candidate** static libraries and Kotlin/Native bindings for the Neton protocol stack.
-Published baseline: `com.netonstream:openssl:4.0.2-3`. The `4.1.0` upgrade is undergoing
-validation and is not yet published (the version follows upstream OpenSSL).
+OpenSSL **4.1.0** static libraries and Kotlin/Native bindings for the Neton protocol stack.
+Published coordinate: `com.netonstream:openssl:4.1.0` (the version follows upstream OpenSSL).
+See [VALIDATION.md](VALIDATION.md) for platform coverage and downstream compatibility results.
 Kotlin compiler: **2.4.20** (no lower version is accepted by the build). Minimum supported OpenSSL line: **4.0.x**, no 3.x compatibility.
 
 ## Scope
@@ -68,7 +68,7 @@ certificate store behavior, network interoperability, QUIC correctness or perfor
 ## Use
 
 ```kotlin
-implementation("com.netonstream:openssl:4.0.2-3")
+implementation("com.netonstream:openssl:4.1.0")
 ```
 
 ```kotlin
@@ -141,7 +141,9 @@ publication version in `gradle.properties`, refreshes the upstream license, and 
 as `4.0.2`; the only difference is the build timestamp in `libcrypto-lib-cversion.o`. It sorts below
 `4.0.2`, so a graph that holds both resolves to `4.0.2`, which is harmless. `com.netonstream:tls:0.1.0`
 depends on it; later tls releases depend on `4.0.2`.
-4.1.0 is the current upgrade candidate, **not yet approved for downstream compatibility**. Do not auto-follow branches.
+4.1.0 is published with the existing public facade unchanged and staged TLS/QUIC compatibility tests passed.
+Neton 1.1.1 and existing protocol releases remain pinned to 4.0.2-3; upgrading their published dependency
+baseline requires a separate release. Do not auto-follow branches.
 
 `publishToMavenLocal` is suitable for host-only development. Maven Central release requires all
 advertised target publications, one root metadata publication configured with `nativeTargets=all`,

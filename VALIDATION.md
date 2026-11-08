@@ -1,17 +1,56 @@
 # Validation
 
-## 4.1.0 release candidate
+## 4.1.0 release validation (2026-11-09)
 
-Upstream OpenSSL 4.1.0 was released on 2026-10-23. The candidate pins its official
-source SHA-256 in gradle.properties. This is an upstream-library upgrade, not a
-wrapper-only renumbering. Native, JNI, Android packaging and downstream TLS/QUIC
-acceptance are pending; no 4.1.0 Maven publication or compatibility approval is
-claimed yet. Existing 4.0.2-3 consumers and ongoing soak tests remain pinned.
+Upstream OpenSSL 4.1.0 was released on 2026-10-23. Its official source SHA-256 is
+pinned in gradle.properties. This is an upstream-library upgrade, not a wrapper-only
+renumbering. Release source: `08bb3735179cf4b065ba80b7b20d4910712dd66b`, tag `v4.1.0`.
+Central deployment: `bda6e249-5e71-4180-b327-57dd49342a43`; status `PUBLISHED`.
+All 80 payloads and 80 signatures were downloaded from the public Maven repository,
+matched byte-for-byte to the verified staging artifacts and checked against the
+production signing key. A fresh Gradle user home with exclusive public Maven resolution
+passed all 27 Kotlin 2.1.21 JVM consumer tests. The Central-only Native consumer also
+ran successfully and reported `OpenSSL 4.1.0 23 Oct 2026`.
 
-2026-11-09 local candidate checks: macOS ARM64 Native 38/38 and JVM 27/27 passed,
-with zero failures or skips. The common runtime test requires actual OpenSSL
-4.1.0, not just a matching major version. Build guard, lock and cache tests also
-passed. This does not certify the other platform binaries or downstream stacks.
+The Kotlin public facade, native implementation and JNI implementation are unchanged
+from v4.0.2-3. Upstream symbol inventories retain all 5,717 libcrypto and 628 libssl
+exports; some APIs gain deprecation flags. This inventory is not a complete binary
+ABI proof. The existing raw C binding remains experimental.
+The bundled license is byte-identical to the upstream 4.1.0 LICENSE.txt.
+
+[Release CI](https://github.com/netonframework/openssl-kotlin/actions/runs/42515438941)
+passed all 13 jobs. The obsolete macOS 14 runner was replaced with macOS 15 and
+Xcode 16.4; no test gate was removed.
+
+| Validation | Result |
+|---|---|
+| Local build guard, lock and cache tests | Passed |
+| macOS ARM64 Native / JVM | 38 / 27 tests passed locally and in CI |
+| Linux x64 Native / JVM | 38 / 27 tests passed in CI |
+| Published-candidate JVM consumers | Kotlin 2.1.21, JDK 8 and 21 on macOS ARM64/x64, Linux ARM64/x64 and Windows x64; each of 10 jobs passed 27 tests, no skips |
+| Local staged Kotlin 2.1.21 consumer | 27 tests passed; no build-tree classes |
+| TLS, TLS-HTTP, TLS-WebSocket | JVM 24/14/8, macOS ARM64 27/14/8 passed against staged 4.1.0, no skips |
+| QUIC | JVM 280 passed; macOS ARM64 621 passed and 3 pre-existing ignored stress tests |
+| Android 16 ARM64 | Kotlin 2.1.21 app built with R8; actual runtime reports OpenSSL 4.1.0; QUIC, WS and WSS passed |
+| Complete release packaging | 10 Native targets, 5 desktop JNI libraries and 2 Android ABIs passed architecture and completeness gates |
+| Production signing | All 80 payloads and signatures verified against AA93E367430D0F9FC4CCB7AB4EC1381BAA4F649B; 13 coordinates |
+
+Local detailed reports are retained in `build/openssl-4.1.0-public-verification.json`,
+`build/openssl-4.1.0-ci-reports/` and `build/openssl-4.1.0-central-consumer.log`.
+Central reports monthly file-count and release-size limits reached, with grace through
+2026-11-09. This deployment succeeded; resolve the quota before the next publication.
+
+The common runtime test requires actual OpenSSL 4.1.0, not just a matching major.
+Downstream tests use the staged Maven artifacts without composite builds and record
+the resolved 4.1.0 coordinates. Existing TLS/QUIC dependencies, Neton 1.1.1's published
+baseline and the ongoing HTTP soak remain pinned to 4.0.2-3. These tests do not certify
+a new Neton dependency baseline or a 24-hour OpenSSL 4.1.0 soak.
+
+Coverage limits: Android API 24 was not rerun in this upgrade; iOS and Android
+Kotlin/Native targets are cross-built, not device-tested. Windows and Linux ARM64
+runtime results above cover JVM/JNI, not Kotlin/Native execution. No performance
+improvement is claimed. The three ignored QUIC tests are stressReceiveWindow,
+stressStreamReceiveWindow and stressBothWindows, unchanged from the existing suite.
 
 ## Historical 4.0.2 validation
 
