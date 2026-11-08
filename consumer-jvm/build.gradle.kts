@@ -1,6 +1,6 @@
 plugins { kotlin("jvm") version "2.1.21" }
 
-val openssl = providers.gradleProperty("opensslVersion").getOrElse("4.1.0")
+val openssl = providers.gradleProperty("opensslVersion").getOrElse("4.1.0-1")
 
 dependencies {
     implementation("com.netonstream:openssl:$openssl")

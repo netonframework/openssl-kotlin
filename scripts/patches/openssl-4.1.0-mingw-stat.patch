@@ -1,0 +1,14 @@
+--- a/providers/implementations/storemgmt/file_store.c
++++ b/providers/implementations/storemgmt/file_store.c
+@@ -33,6 +33,11 @@
+ 
+ DEFINE_STACK_OF(OSSL_STORE_INFO)
+ 
++/* Keep the CRT spelling used by 4.0.2 and Kotlin/Native's MinGW sysroot. */
++#if defined(_WIN32) && defined(__MINGW32__)
++#define stat _stat
++#endif
++
+ #ifndef S_ISDIR
+ #define S_ISDIR(a) (((a) & S_IFMT) == S_IFDIR)
+ #endif

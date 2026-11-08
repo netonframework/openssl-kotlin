@@ -32,6 +32,7 @@ fi
 # No shared libraries or loadable providers: consumers receive a self-contained static build. Position-independent
 # code everywhere, so the same archives also link into the JVM's JNI library (scripts/build-jni.sh, docs/JVM.md).
 FLAGS=(no-shared no-module no-tests no-legacy -fPIC --libdir=lib "--prefix=$PREFIX" "--openssldir=$PREFIX/ssl")
+SOURCE_PATCH=
 case "$TARGET" in
     macosArm64|macosX64|iosArm64|iosSimulatorArm64|iosX64)
         [[ "$(uname -s)" == Darwin ]] || { echo "Apple targets require Xcode" >&2; exit 1; }
@@ -73,6 +74,9 @@ case "$TARGET" in
     mingwX64)
         CONFIG=mingw64
         FLAGS+=(--cross-compile-prefix=x86_64-w64-mingw32-)
+        if [[ "$VERSION" == 4.1.0 ]]; then
+            SOURCE_PATCH="$ROOT/scripts/patches/openssl-4.1.0-mingw-stat.patch"
+        fi
         ;;
     androidNativeArm64|androidNativeX64)
         : "${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to a pinned Android NDK}"
@@ -98,6 +102,7 @@ fi
 COMPILER_VERSION=$("${COMPILER[@]}" --version)
 FINGERPRINT=$({
     digest "$0" | awk '{print $1}'
+    if [[ -n "$SOURCE_PATCH" ]]; then digest "$SOURCE_PATCH" | awk '{print $1}'; fi
     printf '%s\0' "$VERSION" "$SHA" "$TARGET" "$CONFIG" "${FLAGS[@]}" \
         "${CC:-}" "${AR:-}" "${RANLIB:-}" "${CFLAGS:-}" "${CPPFLAGS:-}" "${LDFLAGS:-}" \
         "${CROSS_TOP:-}" "${CROSS_SDK:-}" "${ANDROID_NDK_HOME:-}"
@@ -120,6 +125,7 @@ rm -rf "$SOURCE" "$PREFIX"
 mkdir -p "$SOURCE"
 tar -xzf "$ARCHIVE" -C "$SOURCE" --strip-components=1
 cd "$SOURCE"
+if [[ -n "$SOURCE_PATCH" ]]; then patch --batch --forward -p1 < "$SOURCE_PATCH"; fi
 perl ./Configure "$CONFIG" "${FLAGS[@]}"
 echo "Building OpenSSL $VERSION for $TARGET (log: $BASE/build.log)"
 if ! make -j"${JOBS:-4}" build_libs > "$BASE/build.log" 2>&1; then tail -n 80 "$BASE/build.log"; exit 1; fi

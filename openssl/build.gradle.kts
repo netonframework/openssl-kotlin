@@ -33,6 +33,7 @@ require(desktopJni.keys.containsAll(jniTargets)) { "Unknown jniPlatforms: $jniTa
 val jniPrebuilt = providers.gradleProperty("jniPrebuilt").orNull?.let { file(it) }
 fun buildJniTask(target: String, out: Provider<Directory>) = tasks.register<Exec>("buildJni" + target.replaceFirstChar { it.uppercase() }) {
     inputs.file(rootProject.file("scripts/with-build-lock.pl"))
+    if (target == "mingwX64") inputs.files(rootProject.fileTree("scripts/patches"))
     inputs.files(rootProject.file("scripts/build-jni.sh"), rootProject.file("scripts/build-openssl.sh"), rootProject.file("gradle.properties"))
     inputs.files(fileTree("src/jvmNative"), fileTree("src/nativeInterop/cinterop") { include("*.h") })
     if (target.startsWith("androidNative")) inputs.property("androidNdkHome", providers.environmentVariable("ANDROID_NDK_HOME").orElse(""))
@@ -91,6 +92,7 @@ kotlin {
         val prefix = rootProject.layout.buildDirectory.dir("openssl/$targetName/install")
         val buildOpenSsl = tasks.register<Exec>("buildOpenSsl" + targetName.replaceFirstChar { it.uppercase() }) {
             inputs.file(rootProject.file("scripts/with-build-lock.pl"))
+            if (targetName == "mingwX64") inputs.files(rootProject.fileTree("scripts/patches"))
             inputs.files(rootProject.file("scripts/build-openssl.sh"), rootProject.file("gradle.properties"))
             if (targetName.startsWith("androidNative")) {
                 val ndk = providers.environmentVariable("ANDROID_NDK_HOME").orElse("")

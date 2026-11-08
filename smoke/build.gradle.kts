@@ -11,6 +11,6 @@ kotlin {
     }
     target.binaries.executable { entryPoint = "main" }
     sourceSets.commonMain.dependencies {
-        implementation("com.netonstream:openssl:${providers.gradleProperty("opensslVersion").getOrElse("4.1.0")}")
+        implementation("com.netonstream:openssl:${providers.gradleProperty("opensslVersion").getOrElse("4.1.0-1")}")
     }
 }

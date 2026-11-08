@@ -1,5 +1,22 @@
 # Validation
 
+## 4.1.0-1 candidate: Windows Native repair
+
+Downstream TLS Native linking on Windows exposed an unresolved `stat64i32` symbol
+in 4.1.0's file-store provider. JVM/JNI consumers passed because their DLL links with
+the newer MinGW runtime; those results did not certify Kotlin/Native compatibility.
+The 4.1.0 publication must not be used for Windows Kotlin/Native applications.
+
+The repair restores the `stat` to `_stat` mapping used by upstream 4.0.2, scoped to
+MinGW builds of upstream 4.1.0. Both the function and structure spelling are mapped;
+no ABI-unsafe linker alias or replacement CRT implementation is introduced. The
+tracked source patch is included in the build-cache fingerprint. Public Kotlin/JNI
+APIs and the upstream source archive checksum remain unchanged.
+
+The release matrix now links the full Native Windows tests and separately compiles
+and executes the common public-API tests from the staged KLIB on Windows. Candidate
+validation and publication remain pending.
+
 ## 4.1.0 release validation (2026-11-09)
 
 Upstream OpenSSL 4.1.0 was released on 2026-10-23. Its official source SHA-256 is

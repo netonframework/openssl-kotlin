@@ -3,6 +3,8 @@
 OpenSSL **4.1.0** static libraries and Kotlin/Native bindings for the Neton protocol stack.
 Published coordinate: `com.netonstream:openssl:4.1.0` (the version follows upstream OpenSSL).
 See [VALIDATION.md](VALIDATION.md) for platform coverage and downstream compatibility results.
+Windows Kotlin/Native consumers must wait for the `4.1.0-1` repair: the published `4.1.0`
+static archive has a MinGW CRT link incompatibility. JVM/JNI is unaffected by that link error.
 Kotlin compiler: **2.4.20** (no lower version is accepted by the build). Minimum supported OpenSSL line: **4.0.x**, no 3.x compatibility.
 
 ## Scope

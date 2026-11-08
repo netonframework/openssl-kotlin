@@ -61,4 +61,28 @@ fi
 rm "$TMP/fail"
 CFLAGS=-O0 bash "$TMP/scripts/build-openssl.sh" mingwX64
 [[ $(wc -l < "$TMP/count") -eq 4 ]]
-echo 'PASS: concurrent reuse, path-independent keys, missing outputs, changed flags, and failed-build recovery'
+
+# The version-scoped MinGW source patch participates in the cache key.
+mkdir -p "$TMP/scripts/patches" "$TMP/fixture/openssl/providers/implementations/storemgmt"
+cp "$ROOT/scripts/patches/openssl-4.1.0-mingw-stat.patch" "$TMP/scripts/patches/"
+cat > "$TMP/fixture/openssl/providers/implementations/storemgmt/file_store.c" <<'C'
+
+DEFINE_STACK_OF(OSSL_STORE_INFO)
+
+#ifndef S_ISDIR
+#define S_ISDIR(a) (((a) & S_IFMT) == S_IFDIR)
+#endif
+C
+archive="$TMP/build/downloads/openssl-4.1.0.tar.gz"
+tar -czf "$archive" -C "$TMP/fixture" openssl
+if command -v sha256sum >/dev/null; then sha=$(sha256sum "$archive"); else sha=$(shasum -a 256 "$archive"); fi
+printf 'opensslVersion=4.1.0\nopensslSha256=%s\n' "${sha%% *}" > "$TMP/gradle.properties"
+bash "$TMP/scripts/build-openssl.sh" mingwX64
+[[ $(wc -l < "$TMP/count") -eq 5 ]]
+grep -q '^#define stat _stat$' "$TMP/build/openssl/mingwX64/source/providers/implementations/storemgmt/file_store.c"
+bash "$TMP/scripts/build-openssl.sh" mingwX64
+[[ $(wc -l < "$TMP/count") -eq 5 ]]
+printf '\n' >> "$TMP/scripts/patches/openssl-4.1.0-mingw-stat.patch"
+bash "$TMP/scripts/build-openssl.sh" mingwX64
+[[ $(wc -l < "$TMP/count") -eq 6 ]]
+echo 'PASS: concurrent reuse, missing outputs, flags, failure recovery and versioned source-patch invalidation'
