@@ -3,6 +3,39 @@ on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
+  composite-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select supported Xcode
+        if: runner.os == 'macOS'
+        run: echo "DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Bootstrap Linux x64 compiler and sysroot
+        shell: bash
+        run: |
+          ./gradlew :openssl:downloadKotlinNativeDistribution --console=plain
+          if [ "$(uname -s)" = Darwin ]; then HOST=macos-aarch64; else HOST=linux-x86_64; fi
+          "$HOME/.konan/kotlin-native-prebuilt-$HOST-2.4.20/bin/konanc" scripts/bootstrap.kt -target linux_x64 -produce library -o build/bootstrap
+      - name: Link independent includeBuild consumer without nativeTargets
+        run: ./gradlew -p consumer-composite linkReleaseExecutableLinuxX64 --console=plain
+      - name: Check foreign SDKs and JNI were not built
+        shell: bash
+        run: |
+          test -d build/openssl/linuxX64/install
+          test "$(find build/openssl -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = 1
+          test ! -d openssl/build/jni
+      - name: Execute Linux consumer
+        if: runner.os == 'Linux'
+        run: consumer-composite/build/bin/linuxX64/releaseExecutable/openssl-composite-consumer.kexe
   macos:
     runs-on: macos-15
     env:
@@ -26,9 +59,10 @@ jobs:
           ./gradlew -PnativeTargets=$TARGET :openssl:jvmTest --console=plain
       - name: Validate external Maven consumer
         run: |
-          ./gradlew :openssl:publishToMavenLocal -PandroidNatives=false --console=plain
-          if [ "$(uname -m)" = arm64 ]; then TARGET=MacosArm64; else TARGET=MacosX64; fi
-          ./gradlew -p smoke runReleaseExecutable$TARGET --console=plain
+          if [ "$(uname -m)" = arm64 ]; then TARGET=macosArm64; else TARGET=macosX64; fi
+          ./gradlew -PnativeTargets=$TARGET :openssl:publishToMavenLocal -PandroidNatives=false --console=plain
+          if [ "$TARGET" = macosArm64 ]; then TASK=MacosArm64; else TASK=MacosX64; fi
+          ./gradlew -p smoke runReleaseExecutable$TASK --console=plain
       - uses: actions/upload-artifact@v4
         if: always()
         with:

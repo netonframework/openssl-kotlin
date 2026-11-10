@@ -16,7 +16,9 @@ val host = when {
     else -> error("Build on macOS, Linux or (JVM only) Windows")
 }
 val supported = setOf("macosArm64", "macosX64", "linuxX64", "linuxArm64", "iosArm64", "iosSimulatorArm64", "iosX64", "mingwX64", "androidNativeArm64", "androidNativeX64")
-val selected = providers.gradleProperty("nativeTargets").orElse(host ?: "none").get().let {
+// Composite consumers need foreign variants before Gradle can select their compile/link tasks.
+// Declaring a target does not execute its lazy OpenSSL build or cinterop tasks.
+val selected = providers.gradleProperty("nativeTargets").orElse("all").get().let {
     when (it) { "all" -> supported; "none" -> emptySet(); else -> it.split(',').map(String::trim).toSet() }
 }
 require(supported.containsAll(selected)) { "Unknown nativeTargets: $selected" }
@@ -161,10 +163,10 @@ tasks.register<Zip>("androidNativesAar") {
 }
 
 // Release gate: publishing anywhere but mavenLocal (staging, Central bundles, acceptance repositories) needs the
-// complete artifact set, so a forgotten -PnativeTargets=all / -PjniPlatforms=all / NDK cannot ship a partial release.
+// complete artifact set, so a restricted nativeTargets / forgotten -PjniPlatforms=all / NDK cannot ship a partial release.
 // It requires every native target, and opens the built JVM jar and Android AAR to check each expected library: present,
 // and built for the architecture its directory names (ELF e_machine, Mach-O CPU type, PE machine). Development builds
-// (the host only) and mavenLocal are unaffected.
+// and mavenLocal are unaffected by this gate.
 val desktopLibraries = mapOf(
     "macos-arm64/libneton_openssl.dylib" to "mach-o arm64", "macos-x64/libneton_openssl.dylib" to "mach-o x86_64",
     "linux-x64/libneton_openssl.so" to "elf x86_64", "linux-arm64/libneton_openssl.so" to "elf aarch64",

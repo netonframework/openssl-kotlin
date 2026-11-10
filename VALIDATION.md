@@ -1,5 +1,28 @@
 # Validation
 
+## Default composite variants (2026-11-11, source build only)
+
+Native variants are now declared by default for every supported target. Kotlin/JNI
+APIs, upstream OpenSSL, published artifact versions and explicit `nativeTargets`
+overrides are unchanged. Aggregate builds may request all declared targets;
+host-only aggregate publication must explicitly restrict `nativeTargets`.
+
+Local macOS ARM64 validation:
+
+- `./gradlew -p consumer-composite linkReleaseExecutableLinuxX64` passed without
+  `nativeTargets`, producing an ELF x86-64 Release executable. The independent
+  consumer requests a nonexistent Maven version, so artifact fallback cannot mask
+  a broken composite. Only Linux x64 OpenSSL build/cinterop tasks executed.
+- The same consumer with `-PnativeTargets=macosArm64 --dry-run` failed with the
+  expected missing Linux variant, verifying that explicit restrictions still work.
+- `./gradlew :openssl:macosArm64Test :openssl:jvmTest` passed with default targets:
+  38 Native tests and 27 JVM tests, no failures or skips.
+- Build guards, lock and cache regression scripts passed.
+
+CI adds clean macOS cross-linking and Linux linking/execution for this consumer,
+and checks that no other target archives or JNI output were built. Local
+cross-linking alone does not claim Linux runtime validation or a new Maven release.
+
 ## 4.1.0-1 release validation (2026-11-09)
 
 Published from `f8b0e43a146aca31c9c64691deb02aa905ebfd28`, tag `v4.1.0-1`.

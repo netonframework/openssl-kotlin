@@ -38,10 +38,23 @@ Requirements: JDK 17+, Perl, make, curl; Xcode for Apple targets. macOS host bui
 ./gradlew -PnativeTargets=macosX64 :openssl:macosX64Test
 ```
 
-Only the host target is configured by default, to avoid silently downloading/building all SDKs.
-Use `-PnativeTargets=macosArm64,macosX64` or `-PnativeTargets=all` explicitly. Each target has
+All supported Native variants are declared by default, including in `includeBuild` consumers.
+Requesting a specific compile/link/test task builds only its required targets; merely declaring
+foreign variants does not build their OpenSSL libraries. JNI still defaults to the host platform.
+Use `-PnativeTargets=macosArm64,macosX64` to restrict variants, or `-PnativeTargets=none` for JVM-only
+work. Aggregate tasks such as `build` or `publishToMavenLocal` can request many targets: restrict
+`nativeTargets` for host-only development. Each target has
 separate source, generated headers and output directories under `build/openssl/<target>`.
 Full OpenSSL build output is saved in that directory's `build.log`.
+
+An independent composite consumer can cross-link Linux x64 from macOS without any target property:
+
+```sh
+./gradlew -p consumer-composite linkReleaseExecutableLinuxX64
+```
+
+The target compiler/sysroot is still required. This produces a Linux executable; running it
+requires Linux. `includeBuild` selects source variants, not previously published Maven artifacts.
 
 Linux builds use the **Kotlin/Native 2.4.20 LLVM and sysroot**, including for cross compilation
 from macOS. Bootstrap dependencies once (adjust KONAN_HOME for your host):
@@ -148,7 +161,7 @@ Its release matrix includes Native Windows execution and ten desktop JVM consume
 Neton 1.1.1 and existing protocol releases remain pinned to 4.0.2-3; upgrading their published dependency
 baseline requires a separate release. Do not auto-follow branches.
 
-`publishToMavenLocal` is suitable for host-only development. Maven Central release requires all
+`publishToMavenLocal -PnativeTargets=<host-target>` is suitable for host-only development. Maven Central release requires all
 advertised target publications, one root metadata publication configured with `nativeTargets=all`,
 signed artifacts, and a clean external consumer test. Never publish host-only root metadata as a
 complete multiplatform release. `publishAllPublicationsToStagingRepository` stages files locally;
